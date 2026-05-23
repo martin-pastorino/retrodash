@@ -423,7 +423,7 @@ function hexToRgb(hex) {
         />
 
         <!-- Mobile-First Swipe Navigation Tabs -->
-        <div v-if="isMobile" class="mobile-lanes-nav glass-panel">
+        <div v-if="isMobile && boardStore.activeBoard.status !== 'completed'" class="mobile-lanes-nav glass-panel">
           <button 
             v-for="(col, index) in columns" 
             :key="col.id"
@@ -431,13 +431,14 @@ function hexToRgb(hex) {
             :class="{ active: activeMobileColumnIndex === index }"
             @click="activeMobileColumnIndex = index"
           >
-            <span class="tab-name">{{ col.name }}</span>
+            <span class="tab-name">{{ col.name.split(' ')[1] || col.name }}</span>
             <span class="tab-count-badge">{{ cardsByColumn[col.id]?.length || 0 }}</span>
           </button>
         </div>
 
         <!-- Columns lanes grid Orchestration -->
         <div 
+          v-if="boardStore.activeBoard.status !== 'completed'"
           class="board-columns-grid"
           :style="mobileGridStyle"
           @touchstart="handleTouchStart"
