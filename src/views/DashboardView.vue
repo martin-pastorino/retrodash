@@ -12,7 +12,10 @@ import {
   Layout, 
   Sparkles,
   Sun,
-  Moon
+  Moon,
+  Zap,
+  CalendarClock,
+  CheckCircle2
 } from 'lucide-vue-next';
 import { useThemeStore } from '../stores/theme';
 
@@ -20,6 +23,7 @@ import { useThemeStore } from '../stores/theme';
 import JoinBoardWidget from '../components/JoinBoardWidget.vue';
 import BoardCard from '../components/BoardCard.vue';
 import CreateBoardModal from '../components/CreateBoardModal.vue';
+import DeleteConfirmModal from '../components/DeleteConfirmModal.vue';
 
 const authStore = useAuthStore();
 const boardStore = useBoardStore();
@@ -31,6 +35,9 @@ let boardsUnsubscribe = null;
 
 // Modal Trigger State
 const showCreateModal = ref(false);
+const showDeleteModal = ref(false);
+const boardToDelete = ref(null);
+const deleteLoading = ref(false);
 
 onMounted(async () => {
   if (authStore.user) {
@@ -95,6 +102,28 @@ const handleJoinBoard = async (boardId, setErrorCallback) => {
     setErrorCallback('Código de tablero inválido o no tienes permisos.');
   }
 };
+
+// Delete board flow
+const openDeleteModal = (board) => {
+  boardToDelete.value = board;
+  showDeleteModal.value = true;
+};
+
+const handleDeleteBoard = async () => {
+  if (!boardToDelete.value) return;
+  try {
+    deleteLoading.value = true;
+    await boardStore.deleteBoard(boardToDelete.value.id);
+    showDeleteModal.value = false;
+    boardToDelete.value = null;
+  } catch (error) {
+    console.error('Error deleting board:', error);
+  } finally {
+    deleteLoading.value = false;
+  }
+};
+
+const isOwner = (board) => board.createdBy === authStore.user?.uid;
 </script>
 
 <template>
@@ -168,15 +197,84 @@ const handleJoinBoard = async (boardId, setErrorCallback) => {
           <p>Sincronizando tableros...</p>
         </div>
 
-        <!-- Grid of Boards Extracted Cards -->
-        <div v-else class="boards-grid">
-          <BoardCard 
-            v-for="board in boardStore.boardsList" 
-            :key="board.id" 
-            :board="board"
-            @click="router.push({ name: 'retro', params: { id: board.id } })"
-          />
-        </div>
+        <!-- Grouped Boards -->
+        <template v-else>
+          <!-- 🔴 En Curso -->
+          <div v-if="boardStore.groupedBoards.active.length" class="board-group">
+            <div class="group-header">
+              <div class="group-label">
+                <component :is="Zap" class="group-icon group-icon-active" />
+                <h3>En Curso</h3>
+              </div>
+              <span class="group-count">{{ boardStore.groupedBoards.active.length }}</span>
+            </div>
+            <div class="boards-grid">
+              <BoardCard 
+                v-for="board in boardStore.groupedBoards.active" 
+                :key="board.id" 
+                :board="board"
+                :isOwner="isOwner(board)"
+                @click="router.push({ name: 'retro', params: { id: board.id } })"
+                @delete="openDeleteModal"
+              />
+            </div>
+          </div>
+
+          <!-- 📅 Programadas -->
+          <div v-if="boardStore.groupedBoards.scheduled.length" class="board-group">
+            <div class="group-header">
+              <div class="group-label">
+                <component :is="CalendarClock" class="group-icon group-icon-scheduled" />
+                <h3>Programadas</h3>
+              </div>
+              <span class="group-count">{{ boardStore.groupedBoards.scheduled.length }}</span>
+            </div>
+            <div class="boards-grid">
+              <BoardCard 
+                v-for="board in boardStore.groupedBoards.scheduled" 
+                :key="board.id" 
+                :board="board"
+                :isOwner="isOwner(board)"
+                @click="router.push({ name: 'retro', params: { id: board.id } })"
+                @delete="openDeleteModal"
+              />
+            </div>
+          </div>
+
+          <!-- ✅ Completadas -->
+          <div v-if="boardStore.groupedBoards.completed.length" class="board-group group-completed">
+            <div class="group-header">
+              <div class="group-label">
+                <component :is="CheckCircle2" class="group-icon group-icon-completed" />
+                <h3>Completadas</h3>
+              </div>
+              <span class="group-count">{{ boardStore.groupedBoards.completed.length }}</span>
+            </div>
+            <div class="boards-grid">
+              <BoardCard 
+                v-for="board in boardStore.groupedBoards.completed" 
+                :key="board.id" 
+                :board="board"
+                :isOwner="isOwner(board)"
+                @click="router.push({ name: 'retro', params: { id: board.id } })"
+                @delete="openDeleteModal"
+              />
+            </div>
+          </div>
+
+          <!-- All groups empty (edge case: all boards just got deleted) -->
+          <div 
+            v-if="!boardStore.groupedBoards.active.length && !boardStore.groupedBoards.scheduled.length && !boardStore.groupedBoards.completed.length"
+            class="empty-state glass-panel"
+          >
+            <div class="empty-icon">📂</div>
+            <h3>No tienes tableros activos</h3>
+            <p>Los tableros que crees o a los que te inviten aparecerán aquí en tiempo real.</p>
+            <button @click="showCreateModal = true" class="glass-btn glass-btn-secondary">
+              <span>Crear mi primer tablero</span>
+            </button>
+          </div>
+        </template>
       </section>
 
     </main>
@@ -186,6 +284,15 @@ const handleJoinBoard = async (boardId, setErrorCallback) => {
       :show="showCreateModal" 
       @close="showCreateModal = false"
       @create="handleCreateBoard"
+    />
+
+    <!-- Delete Board Confirmation Modal -->
+    <DeleteConfirmModal 
+      :show="showDeleteModal"
+      :boardName="boardToDelete?.name || ''"
+      :loading="deleteLoading"
+      @close="showDeleteModal = false; boardToDelete = null;"
+      @confirm="handleDeleteBoard"
     />
   </div>
 </template>
@@ -335,6 +442,78 @@ const handleJoinBoard = async (boardId, setErrorCallback) => {
   width: 32px;
   height: 32px;
   color: #c084fc;
+}
+
+/* Board Groups */
+.board-group {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.board-group + .board-group {
+  margin-top: 12px;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.group-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.group-label h3 {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.group-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.group-icon-active {
+  color: #6366f1;
+}
+
+.group-icon-scheduled {
+  color: #f59e0b;
+}
+
+.group-icon-completed {
+  color: #10b981;
+}
+
+.group-count {
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  padding: 2px 10px;
+  border-radius: 20px;
+}
+
+[data-theme="light"] .group-count {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+/* Completed group visual attenuation */
+.group-completed {
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+}
+
+.group-completed:hover {
+  opacity: 1;
 }
 
 .boards-grid {
