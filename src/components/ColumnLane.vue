@@ -103,16 +103,18 @@ const handleSheetSubmit = () => {
 
     <!-- Cards Stack inside Lane -->
     <div class="cards-stack">
-      <RetroCard 
-        v-for="card in cards" 
-        :key="card.id" 
-        :card="card"
-        :board-status="status"
-        :current-user="currentUser"
-        :is-creator="isCreator"
-        @delete="emit('delete-card', card.id)"
-        @vote="emit('vote-card', card.id)"
-      />
+      <TransitionGroup name="cards-list">
+        <RetroCard 
+          v-for="card in cards" 
+          :key="card.id" 
+          :card="card"
+          :board-status="status"
+          :current-user="currentUser"
+          :is-creator="isCreator"
+          @delete="emit('delete-card', card.id)"
+          @vote="emit('vote-card', card.id)"
+        />
+      </TransitionGroup>
     </div>
 
     <!-- Mobile Bottom Sheet Form -->
@@ -317,5 +319,32 @@ const handleSheetSubmit = () => {
   padding: 12px;
   font-size: 14px;
   font-weight: 600;
+}
+
+/* --- Cards Elastic List Transitions (Vue TransitionGroup) --- */
+.cards-list-enter-active,
+.cards-list-leave-active {
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.cards-list-enter-from {
+  opacity: 0;
+  transform: translateY(16px) scale(0.95);
+}
+
+.cards-list-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+/* Animación elástica de reordenamiento de tarjetas en swaps */
+.cards-list-move {
+  transition: transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Eliminar del flujo normal al salir para no entorpecer el movimiento */
+.cards-list-leave-active {
+  position: absolute;
+  width: 100%;
 }
 </style>

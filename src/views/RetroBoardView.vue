@@ -3,7 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useBoardStore } from '../stores/board';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { geminiService } from '../services/gemini';
 
 // Lucide Icons
 import { Lock, ArrowLeft } from 'lucide-vue-next';
@@ -287,81 +287,21 @@ const generateAiActionables = async () => {
   aiError.value = '';
 
   try {
-    // Filter comments that have at least 1 vote and map them
-    const relevantCards = boardStore.activeCards
-      .filter(c => c.votes && c.votes.length >= 1)
-      .map(c => {
-        const colName = columns.value.find(col => col.id === c.columnId)?.name || 'Columna';
-        return {
-          columna: colName,
-          comentario: c.text,
-          votos: c.votes.length
-        };
-      }).sort((a,b) => b.votos - a.votos);
-
-    if (relevantCards.length === 0) {
-      throw new Error('No hay tarjetas con al menos 1 voto en el tablero para realizar el análisis de IA. Asegúrate de votar al menos una tarjeta antes de generar.');
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    // Use the latest recommended model
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-    // =========================================================================
-    // ⚙️ CONFIGURACIÓN DEL PROMPT DE LA IA (FÁCILMENTE EDITABLE EN EL CÓDIGO)
-    // =========================================================================
-    // Aquí puedes expresarle al Facilitador Agile de Gemini cómo quieres que actúe,
-    // su tono, enfoque, cantidad de accionables, idioma, etc.
-    const COMPORTAMIENTO_IA = `
-      Actúas como un facilitador experto de retrospectivas Agile y Scrum. 
-      Analiza los siguientes comentarios generados por el equipo, agrupados por columna y con su número de votos correspondiente. Quiero que seas sumanente analista y sincero, danos tu opion como si fueras un agile coach con muchos años de experiencia.
-      
-      Genera una lista de un máximo de 3 ítems de acción concretos, realistas, directos y listos para ejecutar en el siguiente Sprint.
-      Redacta las explicaciones y accionables completamente en español de manera profesional y motivadora. Ademas quiero que me des un resumen del estado de animo del equipo.. con un emoji que lo represente.
-    `;
-    // =========================================================================
-
-    const prompt = `
-      ${COMPORTAMIENTO_IA}
-
-      Comentarios de la retrospectiva a analizar:
-      ${JSON.stringify(relevantCards, null, 2)}
-
-      Escribe el resultado final del análisis EXCLUSIVAMENTE en formato JSON con la siguiente estructura exacta, sin introducciones, conclusiones ni bloques Markdown (NO uses \`\`\`json ni nada de texto adicional):
-      {
-        "moodSummary": "Resumen analítico y sincero del estado de ánimo del equipo en este Sprint (basado en sus comentarios y votos)...",
-        "moodEmoji": "Un solo emoji que represente mejor el sentimiento del Sprint (ej. 🚀, 😅, 🧘, 😤, 😭, 😊)",
-        "actionItems": [
-          {
-            "text": "Accionable concreto redactado en formato imperativo",
-            "reason": "Explicación breve de por qué se toma este accionable basándose en los comentarios con más votos."
-          }
-        ]
-      }
-    `;
-
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text().trim();
+    const analysis = await geminiService.generateRetroActionables(
+      boardStore.activeCards,
+      columns.value,
+      apiKey
+    );
     
-    // Parse response
-    let cleanJsonStr = responseText;
-    if (cleanJsonStr.includes('```json')) {
-      cleanJsonStr = cleanJsonStr.split('```json')[1].split('```')[0].trim();
-    } else if (cleanJsonStr.includes('```')) {
-      cleanJsonStr = cleanJsonStr.split('```')[1].split('```')[0].trim();
-    }
-
-    const parsedResult = JSON.parse(cleanJsonStr);
-    
-    // Save all fields to Firestore board document
+    // Save generated fields on Firestore board document
     await boardStore.saveAiAnalysis(boardId, {
-      moodSummary: parsedResult.moodSummary || 'Análisis completado.',
-      moodEmoji: parsedResult.moodEmoji || '✨',
-      actionItems: parsedResult.actionItems || []
+      moodSummary: analysis.moodSummary,
+      moodEmoji: analysis.moodEmoji,
+      actionItems: analysis.actionItems
     });
   } catch (error) {
     console.error('Error generating AI actionables:', error);
-    aiError.value = 'Ocurrió un error al procesar con IA. Verifica tu API Key y conexión.';
+    aiError.value = error.message || 'Ocurrió un error al procesar con IA. Verifica tu API Key y conexión.';
   } finally {
     isGeneratingAi.value = false;
   }
