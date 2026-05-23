@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { Plus } from 'lucide-vue-next';
 import RetroCard from './RetroCard.vue';
 
@@ -23,6 +23,18 @@ const props = defineProps({
   isCreator: {
     type: Boolean,
     required: true
+  },
+  canAddCard: {
+    type: Boolean,
+    default: true
+  },
+  graceTimeRemaining: {
+    type: [Number, null],
+    default: null
+  },
+  isTimerActive: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -43,6 +55,13 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile);
+});
+
+const placeholderText = computed(() => {
+  if (!props.isTimerActive) return '🔒 La lluvia de ideas no ha comenzado...';
+  if (!props.canAddCard) return '🔒 El tiempo de escritura ha finalizado por completo.';
+  if (props.graceTimeRemaining !== null && props.graceTimeRemaining > 0) return '⏳ ¡Apresúrate! Tiempo de gracia activo...';
+  return 'Escribe tu opinión aquí...';
 });
 
 const handleAdd = () => {
@@ -79,12 +98,13 @@ const handleSheetSubmit = () => {
     <div v-if="status === 'brainstorm' && !isMobile" class="add-card-container">
       <textarea 
         v-model="cardText" 
-        placeholder="Escribe tu opinión aquí..." 
+        :placeholder="placeholderText" 
         class="glass-input card-textarea"
         rows="2"
+        :disabled="!canAddCard"
         @keyup.enter.exact.prevent="handleAdd"
       ></textarea>
-      <button @click="handleAdd" class="glass-btn add-card-btn" title="Agregar Tarjeta">
+      <button @click="handleAdd" class="glass-btn add-card-btn" title="Agregar Tarjeta" :disabled="!canAddCard">
         <component :is="Plus" class="icon-sm" />
         <span>Agregar</span>
       </button>
@@ -96,6 +116,7 @@ const handleSheetSubmit = () => {
       @click="isBottomSheetOpen = true" 
       class="glass-btn add-card-trigger-btn"
       :style="{ borderColor: column.borderColor || 'rgba(255,255,255,0.1)' }"
+      :disabled="!canAddCard"
     >
       <component :is="Plus" class="icon-sm" />
       <span>Escribir Idea</span>
@@ -103,16 +124,18 @@ const handleSheetSubmit = () => {
 
     <!-- Cards Stack inside Lane -->
     <div class="cards-stack">
-      <RetroCard 
-        v-for="card in cards" 
-        :key="card.id" 
-        :card="card"
-        :board-status="status"
-        :current-user="currentUser"
-        :is-creator="isCreator"
-        @delete="emit('delete-card', card.id)"
-        @vote="emit('vote-card', card.id)"
-      />
+      <TransitionGroup name="cards-list">
+        <RetroCard 
+          v-for="card in cards" 
+          :key="card.id" 
+          :card="card"
+          :board-status="status"
+          :current-user="currentUser"
+          :is-creator="isCreator"
+          @delete="emit('delete-card', card.id)"
+          @vote="emit('vote-card', card.id)"
+        />
+      </TransitionGroup>
     </div>
 
     <!-- Mobile Bottom Sheet Form -->
@@ -131,14 +154,15 @@ const handleSheetSubmit = () => {
           <div class="bottom-sheet-body">
             <textarea 
               v-model="cardText" 
-              placeholder="Escribe tu opinión aquí..." 
+              :placeholder="placeholderText" 
               class="glass-input sheet-textarea"
               rows="4"
               autofocus
+              :disabled="!canAddCard"
             ></textarea>
             <div class="sheet-actions">
               <button @click="isBottomSheetOpen = false" class="glass-btn glass-btn-secondary">Cancelar</button>
-              <button @click="handleSheetSubmit" class="glass-btn glass-btn-primary">
+              <button @click="handleSheetSubmit" class="glass-btn glass-btn-primary" :disabled="!canAddCard">
                 <component :is="Plus" class="icon-sm" />
                 <span>Agregar al Tablero</span>
               </button>
@@ -317,5 +341,52 @@ const handleSheetSubmit = () => {
   padding: 12px;
   font-size: 14px;
   font-weight: 600;
+}
+
+/* --- Cards Elastic List Transitions (Vue TransitionGroup) --- */
+.cards-list-enter-active,
+.cards-list-leave-active {
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.cards-list-enter-from {
+  opacity: 0;
+  transform: translateY(16px) scale(0.95);
+}
+
+.cards-list-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+/* Animación elástica de reordenamiento de tarjetas en swaps */
+.cards-list-move {
+  transition: transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Eliminar del flujo normal al salir para no entorpecer el movimiento */
+.cards-list-leave-active {
+  position: absolute;
+  width: 100%;
+}
+
+/* --- Disabled editor states styling --- */
+.card-textarea:disabled,
+.sheet-textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.01) !important;
+  color: var(--text-muted) !important;
+}
+
+.add-card-trigger-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.glass-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

@@ -20,7 +20,11 @@ service cloud.firestore {
       );
       
       match /cards/{cardId} {
-        allow read, write: if isAuthenticated();
+        allow read, write: if isAuthenticated() && (
+          get(/databases/$(database)/documents/boards/$(boardId)).data.createdBy == request.auth.uid ||
+          get(/databases/$(database)/documents/boards/$(boardId)).data.participants.size() == 0 ||
+          request.auth.token.email.lower() in get(/databases/$(database)/documents/boards/$(boardId)).data.participants
+        );
       }
     }
   }

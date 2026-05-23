@@ -5,6 +5,12 @@
 class NotificationManager {
   constructor() {
     this.scheduledTimeouts = new Map(); // boardId -> timeoutId
+    this.router = null;
+  }
+
+  // Register Vue Router instance for fluid SPA navigation
+  setRouter(router) {
+    this.router = router;
   }
 
   // Request browser Notification permissions
@@ -71,7 +77,11 @@ class NotificationManager {
 
       notification.onclick = () => {
         window.focus();
-        window.location.href = `/retro/${board.id}`;
+        if (this.router) {
+          this.router.push({ name: 'retro', params: { id: board.id } });
+        } else {
+          window.location.href = `/retro/${board.id}`; // fallback
+        }
         notification.close();
       };
     } catch (error) {

@@ -3,7 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useBoardStore } from '../stores/board';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { geminiService } from '../services/gemini';
 
 // Lucide Icons
 import { Lock, ArrowLeft } from 'lucide-vue-next';
@@ -23,6 +23,7 @@ const boardId = route.params.id;
 
 // UI Local States
 const remainingTime = ref(null);
+const graceTimeRemaining = ref(null);
 const timerInterval = ref(null);
 const showSettingsModal = ref(false);
 const isGeneratingAi = ref(false);
@@ -150,17 +151,47 @@ const cardsByColumn = computed(() => {
   return grouped;
 });
 
-// Format timer text
-const formattedTimer = computed(() => {
-  if (remainingTime.value === null || remainingTime.value < 0) return '00:00';
-  const mins = Math.floor(remainingTime.value / 60);
-  const secs = remainingTime.value % 60;
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+// Check if the timer has been started
+const isTimerActive = computed(() => {
+  return !!boardStore.activeBoard?.timerStartedAt && !!boardStore.activeBoard?.timerExpiresAt;
 });
 
-// Watch timer expiration and sync
+// Check if writing is enabled
+const canAddCard = computed(() => {
+  if (boardStore.activeBoard?.status !== 'brainstorm') return false;
+  if (!isTimerActive.value) return false;
+  
+  const expiresAt = boardStore.activeBoard?.timerExpiresAt;
+  if (!expiresAt) return false;
+  
+  const expires = new Date(expiresAt).getTime();
+  const now = new Date().getTime();
+  
+  // Can write if timer is running OR we are in the 30 seconds grace period
+  return now < expires || (now >= expires && now < (expires + 30000));
+});
+
+// Format timer text (handles standard timer and grace period countdown)
+const formattedTimer = computed(() => {
+  if (!isTimerActive.value) return '00:00';
+  
+  if (remainingTime.value !== null && remainingTime.value > 0) {
+    const mins = Math.floor(remainingTime.value / 60);
+    const secs = remainingTime.value % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  
+  if (graceTimeRemaining.value !== null && graceTimeRemaining.value > 0) {
+    return `-${graceTimeRemaining.value}s`;
+  }
+  
+  return '00:00';
+});
+
+// Watch timer expiration, countdown logic, and grace window
 watch(() => boardStore.activeBoard?.timerExpiresAt, (newExpiresAt) => {
   clearInterval(timerInterval.value);
+  graceTimeRemaining.value = null;
   
   if (!newExpiresAt) {
     remainingTime.value = null;
@@ -174,9 +205,20 @@ watch(() => boardStore.activeBoard?.timerExpiresAt, (newExpiresAt) => {
     
     if (difference <= 0) {
       remainingTime.value = 0;
-      clearInterval(timerInterval.value);
+      
+      // Calculate grace period countdown (30s window)
+      const graceExpires = expires + 30 * 1000;
+      const graceDifference = Math.floor((graceExpires - now) / 1000);
+      
+      if (graceDifference <= 0) {
+        graceTimeRemaining.value = 0;
+        clearInterval(timerInterval.value);
+      } else {
+        graceTimeRemaining.value = graceDifference;
+      }
     } else {
       remainingTime.value = difference;
+      graceTimeRemaining.value = null;
     }
   };
 
@@ -287,81 +329,21 @@ const generateAiActionables = async () => {
   aiError.value = '';
 
   try {
-    // Filter comments that have at least 1 vote and map them
-    const relevantCards = boardStore.activeCards
-      .filter(c => c.votes && c.votes.length >= 1)
-      .map(c => {
-        const colName = columns.value.find(col => col.id === c.columnId)?.name || 'Columna';
-        return {
-          columna: colName,
-          comentario: c.text,
-          votos: c.votes.length
-        };
-      }).sort((a,b) => b.votos - a.votos);
-
-    if (relevantCards.length === 0) {
-      throw new Error('No hay tarjetas con al menos 1 voto en el tablero para realizar el análisis de IA. Asegúrate de votar al menos una tarjeta antes de generar.');
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    // Use the latest recommended model
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-    // =========================================================================
-    // ⚙️ CONFIGURACIÓN DEL PROMPT DE LA IA (FÁCILMENTE EDITABLE EN EL CÓDIGO)
-    // =========================================================================
-    // Aquí puedes expresarle al Facilitador Agile de Gemini cómo quieres que actúe,
-    // su tono, enfoque, cantidad de accionables, idioma, etc.
-    const COMPORTAMIENTO_IA = `
-      Actúas como un facilitador experto de retrospectivas Agile y Scrum. 
-      Analiza los siguientes comentarios generados por el equipo, agrupados por columna y con su número de votos correspondiente. Quiero que seas sumanente analista y sincero, danos tu opion como si fueras un agile coach con muchos años de experiencia.
-      
-      Genera una lista de un máximo de 3 ítems de acción concretos, realistas, directos y listos para ejecutar en el siguiente Sprint.
-      Redacta las explicaciones y accionables completamente en español de manera profesional y motivadora. Ademas quiero que me des un resumen del estado de animo del equipo.. con un emoji que lo represente.
-    `;
-    // =========================================================================
-
-    const prompt = `
-      ${COMPORTAMIENTO_IA}
-
-      Comentarios de la retrospectiva a analizar:
-      ${JSON.stringify(relevantCards, null, 2)}
-
-      Escribe el resultado final del análisis EXCLUSIVAMENTE en formato JSON con la siguiente estructura exacta, sin introducciones, conclusiones ni bloques Markdown (NO uses \`\`\`json ni nada de texto adicional):
-      {
-        "moodSummary": "Resumen analítico y sincero del estado de ánimo del equipo en este Sprint (basado en sus comentarios y votos)...",
-        "moodEmoji": "Un solo emoji que represente mejor el sentimiento del Sprint (ej. 🚀, 😅, 🧘, 😤, 😭, 😊)",
-        "actionItems": [
-          {
-            "text": "Accionable concreto redactado en formato imperativo",
-            "reason": "Explicación breve de por qué se toma este accionable basándose en los comentarios con más votos."
-          }
-        ]
-      }
-    `;
-
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text().trim();
+    const analysis = await geminiService.generateRetroActionables(
+      boardStore.activeCards,
+      columns.value,
+      apiKey
+    );
     
-    // Parse response
-    let cleanJsonStr = responseText;
-    if (cleanJsonStr.includes('```json')) {
-      cleanJsonStr = cleanJsonStr.split('```json')[1].split('```')[0].trim();
-    } else if (cleanJsonStr.includes('```')) {
-      cleanJsonStr = cleanJsonStr.split('```')[1].split('```')[0].trim();
-    }
-
-    const parsedResult = JSON.parse(cleanJsonStr);
-    
-    // Save all fields to Firestore board document
+    // Save generated fields on Firestore board document
     await boardStore.saveAiAnalysis(boardId, {
-      moodSummary: parsedResult.moodSummary || 'Análisis completado.',
-      moodEmoji: parsedResult.moodEmoji || '✨',
-      actionItems: parsedResult.actionItems || []
+      moodSummary: analysis.moodSummary,
+      moodEmoji: analysis.moodEmoji,
+      actionItems: analysis.actionItems
     });
   } catch (error) {
     console.error('Error generating AI actionables:', error);
-    aiError.value = 'Ocurrió un error al procesar con IA. Verifica tu API Key y conexión.';
+    aiError.value = error.message || 'Ocurrió un error al procesar con IA. Verifica tu API Key y conexión.';
   } finally {
     isGeneratingAi.value = false;
   }
@@ -398,6 +380,7 @@ function hexToRgb(hex) {
         :is-creator="isCreator"
         :formatted-timer="formattedTimer"
         :remaining-time="remainingTime"
+        :grace-time-remaining="graceTimeRemaining"
         @back="router.push('/')"
         @update-status="handleUpdateStatus"
         @start-timer="handleStartTimer"
@@ -406,9 +389,22 @@ function hexToRgb(hex) {
         @copy-link="copyInviteLink"
       />
 
-      <!-- Brainstorm Warning Banner -->
-      <div v-if="boardStore.activeBoard.status === 'brainstorm' && remainingTime === 0" class="timer-warning-banner glass-panel">
-        <span>⏱️ ¡El tiempo de lluvia de ideas ha terminado! Esperando a que el moderador active la fase de votación.</span>
+      <!-- Dynamic Agile Timer Warning Banners (World-Class UX) -->
+      <div v-if="boardStore.activeBoard.status === 'brainstorm'" class="timer-banners-container">
+        <!-- 1. Timer not started yet -->
+        <div v-if="!isTimerActive" class="timer-info-banner glass-panel">
+          <span>🔒 La lluvia de ideas aún no ha comenzado. El moderador debe iniciar el temporizador para habilitar la escritura.</span>
+        </div>
+        
+        <!-- 2. Grace Period Active -->
+        <div v-else-if="remainingTime === 0 && graceTimeRemaining > 0" class="timer-grace-banner glass-panel">
+          <span class="grace-pulse">⏳ ¡Tiempo de gracia activo! Te quedan <strong>{{ graceTimeRemaining }} segundos</strong> para terminar y enviar tus ideas en curso.</span>
+        </div>
+        
+        <!-- 3. Timer & Grace Period completely expired -->
+        <div v-else-if="remainingTime === 0 && graceTimeRemaining === 0" class="timer-locked-banner glass-panel">
+          <span>🔒 El tiempo para agregar comentarios ha finalizado por completo. Esperando la fase de votación.</span>
+        </div>
       </div>
 
       <!-- Main Board Content -->
@@ -459,6 +455,9 @@ function hexToRgb(hex) {
               :status="boardStore.activeBoard.status"
               :current-user="currentUser"
               :is-creator="isCreator"
+              :can-add-card="canAddCard"
+              :grace-time-remaining="graceTimeRemaining"
+              :is-timer-active="isTimerActive"
               @add-card="(text) => handleAddCard(col.id, text)"
               @delete-card="handleDeleteCard"
               @vote-card="handleVoteCard"
@@ -633,6 +632,77 @@ function hexToRgb(hex) {
 
   .column-lane-wrapper {
     padding: 0 4px; /* Slight lateral margins */
+  }
+}
+
+/* --- Agile Timer Warning Banners System (WOW Design) --- */
+.timer-banners-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.timer-info-banner,
+.timer-grace-banner,
+.timer-locked-banner {
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: all 0.35s ease;
+}
+
+/* Info: Timer not started */
+.timer-info-banner {
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: #c7d2fe;
+}
+
+/* Grace Period: Active 30s countdown */
+.timer-grace-banner {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fef08a;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.1);
+}
+
+.grace-pulse {
+  animation: pulse-light-orange 1.2s infinite alternate ease-in-out;
+}
+
+@keyframes pulse-light-orange {
+  0% { opacity: 0.85; }
+  100% { opacity: 1; transform: scale(1.005); }
+}
+
+/* Locked: Completely ended */
+.timer-locked-banner {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  color: #fca5a5;
+}
+
+/* Light Theme Contrast overrides for Banners */
+[data-theme="light"] {
+  .timer-info-banner {
+    background: rgba(79, 70, 229, 0.05) !important;
+    border-color: rgba(79, 70, 229, 0.2) !important;
+    color: #312e81 !important;
+  }
+  .timer-grace-banner {
+    background: rgba(217, 119, 6, 0.05) !important;
+    border-color: rgba(217, 119, 6, 0.25) !important;
+    color: #78350f !important;
+  }
+  .timer-locked-banner {
+    background: rgba(220, 38, 38, 0.04) !important;
+    border-color: rgba(220, 38, 38, 0.2) !important;
+    color: #7f1d1d !important;
   }
 }
 </style>
