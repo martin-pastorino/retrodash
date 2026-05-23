@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { db } from '../firebase';
 import { 
   collection, 
@@ -8,6 +8,7 @@ import {
   updateDoc, 
   deleteDoc, 
   getDoc,
+  getDocs,
   query, 
   where, 
   orderBy, 
@@ -22,6 +23,33 @@ export const useBoardStore = defineStore('board', () => {
   const activeBoard = ref(null);
   const activeCards = ref([]);
   const loadingBoards = ref(false);
+  const deletingBoardId = ref(null);
+
+  // Computed: boards grouped by temporal state
+  const groupedBoards = computed(() => {
+    const now = new Date();
+    const groups = { active: [], scheduled: [], completed: [] };
+
+    for (const board of boardsList.value) {
+      if (board.status === 'completed') {
+        groups.completed.push(board);
+      } else if (board.scheduledAt) {
+        // scheduledAt can be a Firestore Timestamp or an ISO string
+        const scheduledDate = board.scheduledAt.toDate
+          ? board.scheduledAt.toDate()
+          : new Date(board.scheduledAt);
+        if (scheduledDate > now) {
+          groups.scheduled.push(board);
+        } else {
+          groups.active.push(board);
+        }
+      } else {
+        groups.active.push(board);
+      }
+    }
+
+    return groups;
+  });
 
   // Unsubscribe callbacks to prevent memory leaks
   let boardUnsubscribe = null;
@@ -326,12 +354,38 @@ export const useBoardStore = defineStore('board', () => {
     }
   };
 
+  // Delete a board and all its cards subcollection
+  const deleteBoard = async (boardId) => {
+    try {
+      deletingBoardId.value = boardId;
+
+      // 1. Delete all cards in subcollection (Firestore doesn't cascade-delete)
+      const cardsRef = collection(db, 'boards', boardId, 'cards');
+      const cardsSnap = await getDocs(cardsRef);
+      const deletePromises = cardsSnap.docs.map((cardDoc) =>
+        deleteDoc(doc(db, 'boards', boardId, 'cards', cardDoc.id))
+      );
+      await Promise.all(deletePromises);
+
+      // 2. Delete the board document itself
+      await deleteDoc(doc(db, 'boards', boardId));
+    } catch (error) {
+      console.error('Error deleting board:', error);
+      throw error;
+    } finally {
+      deletingBoardId.value = null;
+    }
+  };
+
   return {
     boardsList,
     activeBoard,
     activeCards,
     loadingBoards,
+    deletingBoardId,
+    groupedBoards,
     createBoard,
+    deleteBoard,
     fetchUserBoards,
     subscribeToBoard,
     subscribeToCards,

@@ -1,12 +1,18 @@
 <script setup>
-import { Clock, Users, ArrowRight } from 'lucide-vue-next';
+import { Clock, Users, ArrowRight, Trash2 } from 'lucide-vue-next';
 
 defineProps({
   board: {
     type: Object,
     required: true
+  },
+  isOwner: {
+    type: Boolean,
+    default: false
   }
 });
+
+defineEmits(['click', 'delete']);
 
 const formatDate = (timestamp) => {
   if (!timestamp) return 'Reciente';
@@ -64,7 +70,18 @@ const formatDate = (timestamp) => {
 
     <!-- Bottom Footer (Anchored strictly to the bottom) -->
     <div class="board-card-footer">
-      <span class="board-author">Por: {{ board.createdByName?.split(' ')[0] || 'Admin' }}</span>
+      <div class="footer-left">
+        <span class="board-author">Por: {{ board.createdByName?.split(' ')[0] || 'Admin' }}</span>
+        <button 
+          v-if="isOwner"
+          class="card-delete-btn"
+          title="Eliminar retrospectiva"
+          aria-label="Eliminar retrospectiva"
+          @click.stop="$emit('delete', board)"
+        >
+          <component :is="Trash2" :size="14" />
+        </button>
+      </div>
       <span class="board-enter-link">
         <span>Entrar</span>
         <component :is="ArrowRight" class="icon-sm anim-arrow" />
@@ -88,6 +105,59 @@ const formatDate = (timestamp) => {
               box-shadow 0.4s ease,
               backdrop-filter 0.4s ease;
   outline: none;
+}
+
+/* Footer left section with author + delete */
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Delete button: inline in footer, revealed on hover */
+.card-delete-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0.8) translateX(-4px);
+  transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), 
+              background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  pointer-events: none;
+}
+
+.board-card:hover .card-delete-btn,
+.board-card:focus-within .card-delete-btn {
+  opacity: 1;
+  transform: scale(1) translateX(0);
+  pointer-events: auto;
+}
+
+.card-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  transform: scale(1.1);
+}
+
+.card-delete-btn:active {
+  transform: scale(0.95);
+}
+
+/* On touch devices, always show the delete button */
+@media (hover: none) {
+  .card-delete-btn {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+    pointer-events: auto;
+  }
 }
 
 /* Accessibility: keyboard focus indicator */
