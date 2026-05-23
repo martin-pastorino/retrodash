@@ -34,6 +34,10 @@ const props = defineProps({
   remainingTime: {
     type: [Number, null],
     required: true
+  },
+  graceTimeRemaining: {
+    type: [Number, null],
+    default: null
   }
 });
 
@@ -84,8 +88,20 @@ const handleStartTimer = () => {
 
     <!-- Sync Timer Widget -->
     <div class="timer-widget glass-panel">
-      <component :is="Clock" class="timer-icon" :class="{ 'pulsing': remainingTime !== null && remainingTime < 60 }" />
-      <span class="timer-display">{{ formattedTimer }}</span>
+      <component 
+        :is="Clock" 
+        class="timer-icon" 
+        :class="{ 
+          'pulsing': remainingTime !== null && remainingTime < 60,
+          'grace-active': graceTimeRemaining !== null && graceTimeRemaining > 0
+        }" 
+      />
+      <span 
+        class="timer-display" 
+        :class="{ 'grace-text': graceTimeRemaining !== null && graceTimeRemaining > 0 }"
+      >
+        {{ formattedTimer }}
+      </span>
       
       <!-- Creator Timer Controls -->
       <div v-if="isCreator && board.status === 'brainstorm'" class="timer-controls">
@@ -228,6 +244,22 @@ const handleStartTimer = () => {
 .timer-icon.pulsing {
   color: #ef4444;
   animation: pulse-red 1s infinite alternate;
+}
+
+.timer-icon.grace-active {
+  color: #f59e0b;
+  animation: pulse-orange 0.8s infinite alternate ease-in-out;
+}
+
+.timer-display.grace-text {
+  color: #f59e0b;
+  font-weight: 800;
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.25);
+}
+
+@keyframes pulse-orange {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.18); opacity: 1; }
 }
 
 .timer-display {
