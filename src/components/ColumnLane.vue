@@ -82,16 +82,19 @@ const handleSheetSubmit = () => {
 
 <template>
   <div 
-    class="column-lane glass-panel"
+    class="column-lane"
+    :class="{ 'mobile-lane': isMobile }"
     :style="{ 
-      backgroundColor: column.color || 'var(--glass-bg)', 
-      borderColor: column.borderColor || 'var(--glass-border)' 
+      backgroundColor: isMobile ? 'transparent' : (column.color || 'var(--glass-bg)'), 
+      borderColor: isMobile ? 'transparent' : (column.borderColor || 'var(--glass-border)') 
     }"
   >
     <!-- Column Header -->
     <div class="column-header">
-      <h3 class="column-title">{{ column.name }}</h3>
-      <span class="cards-count-badge">{{ cards.length }}</span>
+      <div class="title-group">
+        <h3 class="column-title">{{ column.name }}</h3>
+        <span class="cards-count-badge">{{ cards.length }} tarjetas</span>
+      </div>
     </div>
 
     <!-- Add Card Textarea Form (Brainstorm only, desktop inline) -->
@@ -115,11 +118,11 @@ const handleSheetSubmit = () => {
       v-if="status === 'brainstorm' && isMobile" 
       @click="isBottomSheetOpen = true" 
       class="glass-btn add-card-trigger-btn"
-      :style="{ borderColor: column.borderColor || 'rgba(255,255,255,0.1)' }"
+      :style="{ background: column.borderColor || 'var(--indigo-600)', color: '#fff' }"
       :disabled="!canAddCard"
     >
       <component :is="Plus" class="icon-sm" />
-      <span>Escribir Idea</span>
+      <span>Agregar Idea</span>
     </button>
 
     <!-- Cards Stack inside Lane -->
@@ -182,6 +185,15 @@ const handleSheetSubmit = () => {
   flex-direction: column;
   gap: 16px;
   min-height: 480px;
+  border: 1px solid var(--glass-border);
+  transition: all 0.3s ease;
+}
+
+.column-lane.mobile-lane {
+  padding: 16px;
+  min-height: auto;
+  border: none;
+  background: transparent !important;
 }
 
 .column-header {
@@ -192,18 +204,29 @@ const handleSheetSubmit = () => {
   padding-bottom: 12px;
 }
 
+.mobile-lane .column-header {
+  border-bottom-color: rgba(255,255,255,0.1);
+  margin-bottom: 8px;
+}
+
+.title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .column-title {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 800;
   color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
 .cards-count-badge {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  background: rgba(255,255,255,0.08);
-  padding: 2px 8px;
-  border-radius: 10px;
+  color: var(--text-secondary);
+  opacity: 0.8;
 }
 
 /* Add Card elements */
@@ -237,12 +260,17 @@ const handleSheetSubmit = () => {
   overflow-y: auto;
 }
 
+.mobile-lane .cards-stack {
+  gap: 16px;
+  padding-bottom: 100px; /* Space for the floating button or scroll */
+}
+
 /* Bottom Sheet Backdrop */
 .bottom-sheet-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(4, 6, 12, 0.6);
-  backdrop-filter: blur(4px);
+  background: rgba(4, 6, 12, 0.7);
+  backdrop-filter: blur(8px);
   z-index: 2000;
   display: flex;
   flex-direction: column;
@@ -251,19 +279,18 @@ const handleSheetSubmit = () => {
 
 /* Bottom Sheet Content */
 .bottom-sheet-content {
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  border-top: 1px solid var(--glass-border);
-  border-radius: 24px 24px 0 0;
-  padding: 24px;
+  background: #0f172a; /* Solid dark for better mobile contrast */
+  border-top: 1px solid rgba(255,255,255,0.1);
+  border-radius: 28px 28px 0 0;
+  padding: 24px 24px 40px 24px;
   display: flex;
   flex-direction: column;
   gap: 20px;
-  box-shadow: 0 -8px 32px rgba(0,0,0,0.3);
+  box-shadow: 0 -12px 40px rgba(0,0,0,0.5);
 }
 
 .animate-slide-up {
-  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes slideUp {
@@ -285,14 +312,14 @@ const handleSheetSubmit = () => {
 }
 
 .sheet-indicator {
-  width: 40px;
-  height: 4px;
-  background: rgba(255,255,255,0.2);
-  border-radius: 2px;
+  width: 36px;
+  height: 5px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 10px;
 }
 
 .bottom-sheet-header h4 {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--text-primary);
   text-align: center;
@@ -300,11 +327,17 @@ const handleSheetSubmit = () => {
 
 .close-sheet-btn {
   position: absolute;
-  right: 0;
-  top: 4px;
-  background: none;
+  right: -8px;
+  top: 0;
+  background: rgba(255,255,255,0.05);
   border: none;
-  font-size: 24px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
   color: var(--text-secondary);
   cursor: pointer;
 }
@@ -316,13 +349,14 @@ const handleSheetSubmit = () => {
 }
 
 .sheet-textarea {
-  background: rgba(4, 6, 12, 0.4);
-  border: 1px solid rgba(255,255,255,0.08);
-  font-size: 14px;
-  padding: 14px;
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255,255,255,0.1);
+  font-size: 16px; /* Avoid auto-zoom on iOS */
+  padding: 16px;
+  border-radius: 16px;
   resize: none;
   color: var(--text-primary);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .sheet-actions {
@@ -332,15 +366,24 @@ const handleSheetSubmit = () => {
 }
 
 .sheet-actions button {
-  flex: 1;
+  height: 52px;
+  font-weight: 700;
+  border-radius: 14px;
 }
 
 .add-card-trigger-btn {
-  width: 100%;
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  left: 24px;
+  z-index: 500;
+  height: 56px;
   justify-content: center;
-  padding: 12px;
-  font-size: 14px;
-  font-weight: 600;
+  padding: 0 24px;
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: 0 12px 24px rgba(0,0,0,0.3);
+  border: none;
 }
 
 /* --- Cards Elastic List Transitions (Vue TransitionGroup) --- */
@@ -368,25 +411,5 @@ const handleSheetSubmit = () => {
 .cards-list-leave-active {
   position: absolute;
   width: 100%;
-}
-
-/* --- Disabled editor states styling --- */
-.card-textarea:disabled,
-.sheet-textarea:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  background: rgba(255, 255, 255, 0.01) !important;
-  color: var(--text-muted) !important;
-}
-
-.add-card-trigger-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  border-color: rgba(255, 255, 255, 0.05) !important;
-}
-
-.glass-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 </style>

@@ -75,7 +75,7 @@ const mobileGridStyle = computed(() => {
     display: 'flex',
     width: `${columns.value.length * 100}%`,
     transform: `translateX(-${(activeMobileColumnIndex.value * 100) / columns.value.length}%)`,
-    transition: 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)'
+    transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
   };
 });
 
@@ -408,7 +408,7 @@ function hexToRgb(hex) {
       </div>
 
       <!-- Main Board Content -->
-      <div class="board-body-container">
+      <div class="board-body-container" :class="{ 'mobile-mode': isMobile }">
         
         <!-- AI Actionables Extracted Component -->
         <AiActionables 
@@ -431,7 +431,8 @@ function hexToRgb(hex) {
             :class="{ active: activeMobileColumnIndex === index }"
             @click="activeMobileColumnIndex = index"
           >
-            <span class="tab-name">{{ col.name.split(' ')[1] || col.name }}</span>
+            <span class="tab-emoji">{{ col.name.split(' ')[0] }}</span>
+            <span class="tab-name">{{ col.name.split(' ').slice(1).join(' ') || col.name }}</span>
             <span class="tab-count-badge">{{ cardsByColumn[col.id]?.length || 0 }}</span>
           </button>
         </div>
@@ -563,14 +564,18 @@ function hexToRgb(hex) {
 /* Mobile Swipe Navigation Tabs styling */
 .mobile-lanes-nav {
   display: flex;
-  padding: 8px;
-  border-radius: 14px;
-  gap: 8px;
+  padding: 6px;
+  border-radius: 16px;
+  gap: 4px;
   overflow-x: auto;
-  scrollbar-width: none; /* hide scrollbars */
+  scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: -8px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .mobile-lanes-nav::-webkit-scrollbar {
@@ -579,60 +584,91 @@ function hexToRgb(hex) {
 
 .mobile-lane-tab {
   flex: 1;
-  min-width: 100px;
+  min-width: 90px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px 14px;
+  gap: 4px;
+  padding: 10px 8px;
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: 10px;
+  border: none;
+  border-radius: 12px;
   color: var(--text-secondary);
   font-family: var(--font-family-body);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.tab-emoji {
+  font-size: 18px;
+  opacity: 0.7;
+}
+
+.tab-name {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 .mobile-lane-tab.active {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(99, 102, 241, 0.12);
   color: var(--text-primary);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.mobile-lane-tab.active .tab-emoji {
+  opacity: 1;
+  transform: scale(1.1);
 }
 
 .tab-count-badge {
-  font-size: 10px;
-  font-weight: 700;
-  background: rgba(255, 255, 255, 0.12);
-  padding: 2px 6px;
-  border-radius: 8px;
-  color: var(--text-primary);
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  font-size: 9px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.1);
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
 }
 
 .mobile-lane-tab.active .tab-count-badge {
-  background: rgba(99, 102, 241, 0.2);
-  color: #a5b4fc;
+  background: var(--indigo-600);
+  color: white;
 }
 
 /* Responsiveness overrides for columns flex grid */
 @media (max-width: 768px) {
-  .board-body-container {
-    overflow: hidden; /* Prevent horizontal page scroll during swipes */
+  .retro-board-view {
+    padding: 12px 0 0 0; /* Remove lateral padding for full-bleed */
+    gap: 12px;
+  }
+
+  .board-body-container.mobile-mode {
+    overflow: hidden;
     width: 100%;
+    padding: 0;
   }
 
   .board-columns-grid {
     display: flex !important;
     gap: 0 !important;
-    padding: 4px 0;
+    padding: 0;
   }
 
   .column-lane-wrapper {
-    padding: 0 4px; /* Slight lateral margins */
+    padding: 0; /* Full-bleed cards */
+  }
+
+  /* Adjust banners for mobile */
+  .timer-banners-container {
+    padding: 0 16px;
   }
 }
 
