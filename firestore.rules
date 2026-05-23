@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    match /boards/{boardId} {
+      allow create: if isAuthenticated();
+      
+      // Permitir leer, actualizar y borrar si:
+      // 1. El usuario es el creador del tablero (hace posible la consulta by createdBy)
+      // 2. El tablero es abierto (participants está vacío)
+      // 3. El correo del usuario está en la lista de participantes (hace posible la consulta arrayContains)
+      allow read, update, delete: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        resource.data.participants.size() == 0 ||
+        request.auth.token.email.lower() in resource.data.participants
+      );
+      
+      match /cards/{cardId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+  }
+}
