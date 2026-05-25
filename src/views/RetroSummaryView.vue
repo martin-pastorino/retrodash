@@ -15,7 +15,8 @@ import {
   Calendar, 
   User,
   ExternalLink,
-  ChevronLeft
+  ChevronLeft,
+  Download
 } from 'lucide-vue-next';
 
 const route = useRoute();
@@ -95,8 +96,8 @@ const statusIcon = (status) => {
 };
 
 // Agile Markdown Export Formatter
-const copyMarkdownReport = () => {
-  if (!board.value) return;
+const generateMarkdownContent = () => {
+  if (!board.value) return '';
 
   const title = `# 🚀 Reporte de Retrospectiva: ${board.value.name}\n`;
   const meta = `*Fecha:* ${formatDate(board.value.createdAt)} | *Moderador:* ${board.value.createdByName || 'Admin'}\n\n`;
@@ -115,11 +116,31 @@ const copyMarkdownReport = () => {
 
   const footer = `*Reporte generado automáticamente por RetroDash ✨*`;
 
-  const fullReport = `${title}${meta}${mood}${actionItemsMd}${footer}`;
+  return `${title}${meta}${mood}${actionItemsMd}${footer}`;
+};
 
-  navigator.clipboard.writeText(fullReport);
+const copyMarkdownReport = () => {
+  const content = generateMarkdownContent();
+  if (!content) return;
+
+  navigator.clipboard.writeText(content);
   isCopied.value = true;
   setTimeout(() => isCopied.value = false, 2000);
+};
+
+const downloadMarkdownReport = () => {
+  const content = generateMarkdownContent();
+  if (!content) return;
+
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', 'resumen.md');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 };
 </script>
 
@@ -138,10 +159,15 @@ const copyMarkdownReport = () => {
         </div>
       </div>
       
-      <div class="nav-actions">
-        <button @click="copyMarkdownReport" class="glass-btn glass-btn-primary copy-report-btn">
+      <div class="nav-actions" style="display: flex; gap: 12px; align-items: center;">
+        <button @click="copyMarkdownReport" class="glass-btn glass-btn-secondary copy-report-btn">
           <component :is="isCopied ? Check : Copy" class="icon-sm" />
-          <span>{{ isCopied ? '¡Copiado!' : 'Copiar Reporte Markdown' }}</span>
+          <span>{{ isCopied ? '¡Copiado!' : 'Copiar Portapapeles' }}</span>
+        </button>
+        
+        <button @click="downloadMarkdownReport" class="glass-btn glass-btn-primary download-report-btn" style="display: flex; align-items: center; gap: 8px;">
+          <component :is="Download" class="icon-sm" />
+          <span>Exportar a resumen.md</span>
         </button>
       </div>
     </header>
@@ -360,7 +386,8 @@ const copyMarkdownReport = () => {
   -webkit-text-fill-color: transparent;
 }
 
-.copy-report-btn {
+.copy-report-btn,
+.download-report-btn {
   padding: 12px 20px;
   font-size: 14px;
 }
