@@ -1,7 +1,8 @@
 <script setup>
-import { Clock, Users, ArrowRight, Trash2 } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { Clock, Users, ArrowRight, Trash2, ListChecks } from 'lucide-vue-next';
 
-defineProps({
+const props = defineProps({
   board: {
     type: Object,
     required: true
@@ -19,6 +20,11 @@ const formatDate = (timestamp) => {
   const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
   return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
 };
+
+const pendingActions = computed(() => {
+  if (!props.board.actionsPlanSaved || !props.board.actionItems) return 0;
+  return props.board.actionItems.filter(i => i.status !== 'done').length;
+});
 </script>
 
 <template>
@@ -65,6 +71,12 @@ const formatDate = (timestamp) => {
           :style="{ backgroundColor: col.borderColor || col.color || '#fff' }"
           :title="`Columna: ${col.name}`"
         ></div>
+      </div>
+
+      <!-- Pending Actionables Indicator -->
+      <div v-if="pendingActions > 0" class="pending-actions-badge">
+        <component :is="ListChecks" :size="13" />
+        <span>{{ pendingActions }} accionable{{ pendingActions > 1 ? 's' : '' }} pendiente{{ pendingActions > 1 ? 's' : '' }}</span>
       </div>
     </div>
 
