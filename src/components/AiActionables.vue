@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue';
-import { BrainCircuit, Sparkles, HelpCircle, Save, UserPlus, Check, Loader2, Circle, CircleDot, CheckCircle2 } from 'lucide-vue-next';
+import { BrainCircuit, Sparkles, HelpCircle, Save, UserPlus, Check, Loader2, Circle, CircleDot, CheckCircle2, ListChecks } from 'lucide-vue-next';
+import { useRouter } from 'vue-router';
 
 const MAX_GENERATIONS = 3;
 
@@ -18,13 +19,19 @@ const props = defineProps({
   pendingItems: { type: Array, default: () => [] },
   pendingMood: { type: Object, default: null },
   currentUserEmail: { type: String, default: '' },
-  currentUserUid: { type: String, default: '' }
+  currentUserUid: { type: String, default: '' },
+  boardId: { type: String, required: true }
 });
 
 const emit = defineEmits(['generate', 'save-plan', 'update-status']);
 
 // Local assignment state for preview mode
 const assignments = ref({});
+const router = useRouter();
+
+const goToSummary = () => {
+  router.push({ name: 'retro-summary', params: { id: props.boardId } });
+};
 
 const remainingGenerations = computed(() => MAX_GENERATIONS - props.aiGenerationCount);
 const canGenerate = computed(() => remainingGenerations.value > 0 && !props.actionsPlanSaved);
@@ -125,6 +132,17 @@ const progressPercent = computed(() => totalCount.value ? Math.round((completedC
         <span v-if="isCreator && !actionsPlanSaved && canGenerate" class="gen-counter">
           {{ remainingGenerations }}/{{ MAX_GENERATIONS }} restantes
         </span>
+        
+        <!-- View Full Summary & Stats Page (only when plan is saved) -->
+        <button 
+          v-if="actionsPlanSaved"
+          @click="goToSummary"
+          class="glass-btn glass-btn-secondary view-report-btn"
+          style="display: flex; align-items: center; gap: 8px;"
+        >
+          <component :is="ListChecks" class="icon-sm" />
+          <span>Ver Reporte Completo</span>
+        </button>
       </div>
     </div>
 
@@ -200,13 +218,15 @@ const progressPercent = computed(() => totalCount.value ? Math.round((completedC
       <div class="save-plan-footer">
         <button 
           @click="handleSavePlan"
-          :disabled="!allAssigned"
+          :disabled="pendingItems.length === 0"
           class="glass-btn glass-btn-primary save-plan-btn"
         >
           <component :is="Save" class="icon-sm" />
           <span>Guardar Plan de Acción</span>
         </button>
-        <small v-if="!allAssigned" class="save-hint">Asigná todos los accionables para poder guardar</small>
+        <small class="save-hint">
+          {{ allAssigned ? '¡Listo! Todos los accionables asignados.' : 'Asignación opcional: podés guardar ahora y terminar de asignar después.' }}
+        </small>
       </div>
     </template>
 

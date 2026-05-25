@@ -470,6 +470,7 @@ h1, h2, h3, h4, h5, h6 {
 
   /* Text Gradients Legibility overrides */
   .nav-title,
+  .nav-board-title,
   .welcome-text h1,
   .brand-logo h1 {
     background: linear-gradient(135deg, #0f172a 20%, #4f46e5 100%) !important;

@@ -1,6 +1,9 @@
 <script setup>
 import { computed } from 'vue';
 import { Clock, Users, ArrowRight, Trash2, ListChecks } from 'lucide-vue-next';
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
 
 const props = defineProps({
   board: {
@@ -92,6 +95,17 @@ const pendingActions = computed(() => {
           @click.stop="$emit('delete', board)"
         >
           <component :is="Trash2" :size="14" />
+        </button>
+
+        <button 
+          v-if="board.actionsPlanSaved"
+          class="card-summary-btn"
+          title="Ver resumen y accionables"
+          aria-label="Ver resumen y accionables"
+          @click.stop="router.push({ name: 'retro-summary', params: { id: board.id } })"
+        >
+          <component :is="ListChecks" :size="13" />
+          <span>Resumen</span>
         </button>
       </div>
       <span class="board-enter-link">
@@ -348,5 +362,45 @@ const pendingActions = computed(() => {
   box-shadow: 0 20px 40px -10px rgba(16, 185, 129, 0.28), 
               0 0 22px 0 rgba(16, 185, 129, 0.15), 
               var(--glass-shadow-inset);
+}
+
+/* Summary Button in Card Footer */
+.card-summary-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #a5b4fc;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  z-index: 10;
+}
+
+[data-theme="light"] .card-summary-btn {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.06);
+  color: #4f46e5;
+}
+
+.card-summary-btn:hover {
+  background: rgba(165, 180, 252, 0.12);
+  border-color: rgba(165, 180, 252, 0.3);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+[data-theme="light"] .card-summary-btn:hover {
+  background: rgba(79, 70, 229, 0.1);
+  border-color: rgba(79, 70, 229, 0.2);
+  color: #3730a3;
+}
+
+.card-summary-btn:active {
+  transform: translateY(0);
 }
 </style>

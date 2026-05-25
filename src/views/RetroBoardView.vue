@@ -459,6 +459,7 @@ function hexToRgb(hex) {
         <!-- AI Actionables Extracted Component -->
         <AiActionables 
           v-if="boardStore.activeBoard.status === 'completed'"
+          :board-id="boardId"
           :action-items="boardStore.activeBoard.actionItems || []"
           :mood-summary="boardStore.activeBoard.moodSummary || ''"
           :mood-emoji="boardStore.activeBoard.moodEmoji || ''"
