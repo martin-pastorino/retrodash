@@ -78,12 +78,20 @@ const handleLogout = async () => {
 // Create board action handler (passed to CreateBoardModal)
 const handleCreateBoard = async (formData, setErrorCallback) => {
   try {
+    // Desempaquetar explícitamente el usuario para evitar errores de serialización de proxies reactivos en Firestore
+    const userPlane = authStore.user ? {
+      uid: authStore.user.uid,
+      email: authStore.user.email,
+      displayName: authStore.user.displayName,
+      photoURL: authStore.user.photoURL
+    } : null;
+
     const boardId = await boardStore.createBoard(
       formData.name,
       formData.duration,
       formData.participants,
       formData.columns,
-      authStore.user,
+      userPlane,
       formData.scheduledAt
     );
     showCreateModal.value = false;
@@ -160,7 +168,7 @@ const isOwner = (board) => board.createdBy === authStore.user?.uid;
       <!-- Welcome Header -->
       <section class="welcome-section">
         <div class="welcome-text">
-          <h1>Hola, {{ authStore.user?.displayName.split(' ')[0] || 'Martin' }} 👋</h1>
+          <h1>Hola, {{ authStore.user?.displayName?.split(' ')[0] || 'Martin' }} 👋</h1>
           <p>Organiza retrospectivas eficaces y obtén accionables automáticos.</p>
         </div>
         <div class="welcome-actions">

@@ -23,6 +23,7 @@ const customColumns = ref([
 ]);
 
 const createError = ref('');
+const isCreating = ref(false);
 
 // New Column addition states
 const newColName = ref('');
@@ -36,6 +37,7 @@ watch(() => props.show, (isOpen) => {
     newBoardParticipants.value = '';
     newBoardScheduledAt.value = '';
     createError.value = '';
+    isCreating.value = false;
     customColumns.value = [
       { id: 'good', name: '😊 Lo que salió bien', color: '#10b981' },
       { id: 'bad', name: '😢 Lo que salió mal', color: '#ef4444' },
@@ -60,9 +62,11 @@ const removeCustomColumn = (index) => {
 };
 
 const handleCreate = () => {
-  if (!newBoardName.value.trim()) return;
+  if (!newBoardName.value.trim() || isCreating.value) return;
   
+  isCreating.value = true;
   createError.value = '';
+  
   const columnsData = customColumns.value.map(col => ({
     id: col.id,
     name: col.name,
@@ -77,6 +81,7 @@ const handleCreate = () => {
     columns: columnsData,
     scheduledAt: newBoardScheduledAt.value || null
   }, (errorMsg) => {
+    isCreating.value = false;
     if (errorMsg) {
       createError.value = errorMsg;
     }
@@ -84,6 +89,7 @@ const handleCreate = () => {
 };
 
 function hexToRgb(hex) {
+  if (!hex || typeof hex !== 'string') return '255, 255, 255';
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result 
     ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
@@ -186,14 +192,15 @@ function hexToRgb(hex) {
       </div>
 
       <div class="modal-footer">
-        <button @click="emit('close')" class="glass-btn glass-btn-secondary">Cancelar</button>
+        <button @click="emit('close')" :disabled="isCreating" class="glass-btn glass-btn-secondary">Cancelar</button>
         <button 
           @click="handleCreate" 
-          :disabled="!newBoardName.trim() || customColumns.length === 0" 
+          :disabled="!newBoardName.trim() || customColumns.length === 0 || isCreating" 
           class="glass-btn glass-btn-primary"
         >
-          <component :is="Sparkles" class="icon-sm" />
-          <span>Crear Tablero</span>
+          <span v-if="isCreating" class="spinner-pulse" style="width: 14px; height: 14px; border-radius: 50%;"></span>
+          <component v-else :is="Sparkles" class="icon-sm" />
+          <span>{{ isCreating ? 'Creando...' : 'Crear Tablero' }}</span>
         </button>
       </div>
     </div>

@@ -15,7 +15,8 @@ import {
   onSnapshot, 
   serverTimestamp,
   arrayUnion,
-  arrayRemove
+  arrayRemove,
+  increment
 } from 'firebase/firestore';
 
 export const useBoardStore = defineStore('board', () => {
@@ -114,7 +115,7 @@ export const useBoardStore = defineStore('board', () => {
     // Query B: Boards I am invited to as participant
     const qInvited = query(
       collection(db, 'boards'),
-      where('participants', 'arrayContains', userEmail.toLowerCase())
+      where('participants', 'array-contains', userEmail.toLowerCase())
     );
 
     const boardsMap = new Map();
@@ -354,6 +355,59 @@ export const useBoardStore = defineStore('board', () => {
     }
   };
 
+  // Save confirmed Action Plan (enriched actionItems with assignments)
+  const saveActionPlan = async (boardId, actionItems) => {
+    try {
+      const boardRef = doc(db, 'boards', boardId);
+      await updateDoc(boardRef, {
+        actionItems,
+        actionsPlanSaved: true
+      });
+    } catch (error) {
+      console.error('Error saving action plan:', error);
+      throw error;
+    }
+  };
+
+  // Increment AI generation counter (atomic)
+  const incrementAiGeneration = async (boardId) => {
+    try {
+      const boardRef = doc(db, 'boards', boardId);
+      await updateDoc(boardRef, {
+        aiGenerationCount: increment(1)
+      });
+    } catch (error) {
+      console.error('Error incrementing AI generation count:', error);
+      throw error;
+    }
+  };
+
+  // Update a single action item's status within the board's actionItems array
+  const updateActionItemStatus = async (boardId, actionItemId, newStatus) => {
+    try {
+      const boardRef = doc(db, 'boards', boardId);
+      const boardSnap = await getDoc(boardRef);
+      if (!boardSnap.exists()) return;
+
+      const currentItems = boardSnap.data().actionItems || [];
+      const updatedItems = currentItems.map(item => {
+        if (item.id === actionItemId) {
+          return {
+            ...item,
+            status: newStatus,
+            completedAt: newStatus === 'done' ? new Date().toISOString() : null
+          };
+        }
+        return item;
+      });
+
+      await updateDoc(boardRef, { actionItems: updatedItems });
+    } catch (error) {
+      console.error('Error updating action item status:', error);
+      throw error;
+    }
+  };
+
   // Delete a board and all its cards subcollection
   const deleteBoard = async (boardId) => {
     try {
@@ -398,6 +452,9 @@ export const useBoardStore = defineStore('board', () => {
     clearBoardTimer,
     updateBoardColumns,
     saveAiAnalysis,
-    updateBoardPrompt
+    updateBoardPrompt,
+    saveActionPlan,
+    incrementAiGeneration,
+    updateActionItemStatus
   };
 });

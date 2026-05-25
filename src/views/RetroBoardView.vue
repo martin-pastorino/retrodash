@@ -30,6 +30,10 @@ const isGeneratingAi = ref(false);
 const aiError = ref('');
 const isCopied = ref(false);
 
+// Pending AI actionables (preview mode — not yet saved to Firestore)
+const pendingActionItems = ref([]);
+const pendingMood = ref(null);
+
 // Mobile Responsive & Swipe States
 const isMobile = ref(false);
 const activeMobileColumnIndex = ref(0);
@@ -318,6 +322,15 @@ const handleSaveApiKey = (key) => {
 
 // Gemini AI actionables extraction
 const generateAiActionables = async () => {
+  const board = boardStore.activeBoard;
+  const maxGen = 3;
+  const currentCount = board?.aiGenerationCount || 0;
+
+  if (currentCount >= maxGen) {
+    aiError.value = `Has alcanzado el límite de ${maxGen} generaciones de IA para esta retro.`;
+    return;
+  }
+
   const apiKey = localStorage.getItem('RETRODASH_GEMINI_KEY') || import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
     aiError.value = 'Por favor, ingresa una Gemini API Key en la configuración para utilizar esta función.';
@@ -329,23 +342,56 @@ const generateAiActionables = async () => {
   aiError.value = '';
 
   try {
+    // Increment generation counter atomically
+    await boardStore.incrementAiGeneration(boardId);
+
     const analysis = await geminiService.generateRetroActionables(
       boardStore.activeCards,
       columns.value,
       apiKey
     );
     
-    // Save generated fields on Firestore board document
+    // Store in local pending state (NOT persisted yet)
+    pendingActionItems.value = analysis.actionItems || [];
+    pendingMood.value = {
+      summary: analysis.moodSummary,
+      emoji: analysis.moodEmoji
+    };
+
+    // Save mood to Firestore immediately (mood is always useful)
     await boardStore.saveAiAnalysis(boardId, {
       moodSummary: analysis.moodSummary,
       moodEmoji: analysis.moodEmoji,
-      actionItems: analysis.actionItems
+      // Don't overwrite actionItems here — they go through save-plan flow
+      actionItems: boardStore.activeBoard?.actionItems || []
     });
   } catch (error) {
     console.error('Error generating AI actionables:', error);
     aiError.value = error.message || 'Ocurrió un error al procesar con IA. Verifica tu API Key y conexión.';
   } finally {
     isGeneratingAi.value = false;
+  }
+};
+
+// Save the confirmed action plan
+const handleSaveActionPlan = async (enrichedItems) => {
+  try {
+    await boardStore.saveActionPlan(boardId, enrichedItems);
+    // Clear pending state
+    pendingActionItems.value = [];
+    pendingMood.value = null;
+  } catch (error) {
+    console.error('Error saving action plan:', error);
+    aiError.value = 'Error al guardar el plan de acción.';
+  }
+};
+
+// Update an individual action item status
+const handleUpdateActionStatus = async (actionItemId, newStatus) => {
+  try {
+    await boardStore.updateActionItemStatus(boardId, actionItemId, newStatus);
+  } catch (error) {
+    console.error('Error updating action status:', error);
   }
 };
 
@@ -413,13 +459,23 @@ function hexToRgb(hex) {
         <!-- AI Actionables Extracted Component -->
         <AiActionables 
           v-if="boardStore.activeBoard.status === 'completed'"
+          :board-id="boardId"
           :action-items="boardStore.activeBoard.actionItems || []"
           :mood-summary="boardStore.activeBoard.moodSummary || ''"
           :mood-emoji="boardStore.activeBoard.moodEmoji || ''"
           :is-creator="isCreator"
           :is-generating="isGeneratingAi"
           :error="aiError"
+          :participants="boardStore.activeBoard.participants || []"
+          :actions-plan-saved="boardStore.activeBoard.actionsPlanSaved || false"
+          :ai-generation-count="boardStore.activeBoard.aiGenerationCount || 0"
+          :pending-items="pendingActionItems"
+          :pending-mood="pendingMood"
+          :current-user-email="currentUser?.email?.toLowerCase() || ''"
+          :current-user-uid="currentUser?.uid || ''"
           @generate="generateAiActionables"
+          @save-plan="handleSaveActionPlan"
+          @update-status="handleUpdateActionStatus"
         />
 
         <!-- Mobile-First Swipe Navigation Tabs -->
