@@ -15,7 +15,9 @@ import {
   Moon,
   Zap,
   CalendarClock,
-  CheckCircle2
+  CheckCircle2,
+  Bell,
+  BellOff
 } from 'lucide-vue-next';
 import { useThemeStore } from '../stores/theme';
 
@@ -39,11 +41,24 @@ const showDeleteModal = ref(false);
 const boardToDelete = ref(null);
 const deleteLoading = ref(false);
 
+// FCM Reactivity
+const pushSupported = ref(false);
+const pushEnabled = ref(false);
+const pushLoading = ref(false);
+
 onMounted(async () => {
   if (authStore.user) {
     boardsUnsubscribe = boardStore.fetchUserBoards(authStore.user.email, authStore.user.uid);
-    // Request permission for push notifications
-    await notifications.requestPermission();
+    
+    // Verificar si FCM es soportado en el navegador y configurar estados
+    const supported = await notifications.checkSupport();
+    pushSupported.value = supported && ('Notification' in window);
+    pushEnabled.value = Notification.permission === 'granted';
+    
+    // Si ya tiene permiso concedido, nos aseguramos de sincronizar/refrescar el token FCM en Firestore
+    if (pushEnabled.value) {
+      notifications.syncFcmToken(authStore.user.uid);
+    }
   }
 });
 
@@ -65,8 +80,41 @@ watch(
   { deep: true }
 );
 
+// Toggle Firebase Push Notifications and sync token in Firestore
+const togglePushNotifications = async () => {
+  if (!pushSupported.value || pushLoading.value || !authStore.user) return;
+  
+  pushLoading.value = true;
+  try {
+    if (pushEnabled.value) {
+      // Desactivar: Revocar token en Firestore
+      await notifications.disablePushNotifications(authStore.user.uid);
+      pushEnabled.value = false;
+      console.log('🔔 [FCM] Notificaciones push desactivadas para este navegador.');
+    } else {
+      // Activar: Solicitar permisos y registrar token
+      const permission = await notifications.requestPermission(authStore.user.uid);
+      if (permission === 'granted') {
+        pushEnabled.value = true;
+        console.log('🔔 [FCM] Notificaciones push activadas con éxito.');
+      } else {
+        pushEnabled.value = false;
+        console.warn('🔔 [FCM] Permiso de notificaciones denegado por el usuario.');
+      }
+    }
+  } catch (error) {
+    console.error('Error al conmutar las notificaciones push:', error);
+  } finally {
+    pushLoading.value = false;
+  }
+};
+
 const handleLogout = async () => {
   try {
+    // Revocar token en Firestore al desloguearse para mayor seguridad y evitar spam
+    if (authStore.user) {
+      await notifications.disablePushNotifications(authStore.user.uid);
+    }
     notifications.cancelAll(); // Clean up notifications on logout
     await authStore.logout();
     router.push({ name: 'login' });
@@ -154,6 +202,18 @@ const isOwner = (board) => board.createdBy === authStore.user?.uid;
         </div>
         <button @click="themeStore.toggleTheme" class="glass-btn glass-btn-secondary theme-toggle-btn" title="Cambiar Tema" style="padding: 10px; display: flex;">
           <component :is="themeStore.theme === 'dark' ? Sun : Moon" class="icon-sm" />
+        </button>
+        <button 
+          v-if="pushSupported" 
+          @click="togglePushNotifications" 
+          :class="['glass-btn', pushEnabled ? 'glass-btn-primary' : 'glass-btn-secondary', 'push-toggle-btn']" 
+          :title="pushEnabled ? 'Desactivar Notificaciones Push' : 'Activar Notificaciones Push'" 
+          :disabled="pushLoading"
+          style="padding: 10px; display: flex; position: relative; gap: 4px;"
+        >
+          <span v-if="pushLoading" class="spinner-pulse" style="width: 14px; height: 14px; border-width: 2px; margin: 0;"></span>
+          <component v-else :is="pushEnabled ? Bell : BellOff" class="icon-sm" :class="{ 'icon-wiggle': pushEnabled }" />
+          <span v-if="pushEnabled" class="status-indicator-dot"></span>
         </button>
         <button @click="handleLogout" class="glass-btn glass-btn-secondary logout-btn" title="Cerrar Sesión">
           <component :is="LogOut" class="icon-sm" />
@@ -577,6 +637,57 @@ const isOwner = (board) => board.createdBy === authStore.user?.uid;
   .action-btn {
     width: 100%;
     justify-content: center;
+  }
+}
+
+/* Notificaciones Push Premium Styles */
+.push-toggle-btn {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.push-toggle-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+}
+
+.status-indicator-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 10px #10b981;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  animation: pulse-green 2s infinite;
+}
+
+.icon-wiggle {
+  transform-origin: top center;
+  animation: bell-wiggle 3s ease-in-out infinite;
+}
+
+@keyframes bell-wiggle {
+  0%, 90%, 100% { transform: rotate(0); }
+  92% { transform: rotate(12deg); }
+  94% { transform: rotate(-12deg); }
+  96% { transform: rotate(8deg); }
+  98% { transform: rotate(-8deg); }
+}
+
+@keyframes pulse-green {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
   }
 }
 </style>
