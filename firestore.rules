@@ -27,5 +27,15 @@ service cloud.firestore {
         );
       }
     }
+
+    // Reglas de Seguridad para Perfiles y Tokens FCM multidispositivo
+    match /users/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      
+      match /fcmTokens/{tokenId} {
+        allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      }
+    }
   }
 }
+
