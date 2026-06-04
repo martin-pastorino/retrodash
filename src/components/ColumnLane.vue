@@ -258,6 +258,7 @@ const handleSheetSubmit = () => {
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
+  position: relative; /* Essential for TransitionGroup absolute exit */
 }
 
 .mobile-lane .cards-stack {
