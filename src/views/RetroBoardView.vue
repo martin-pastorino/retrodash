@@ -96,6 +96,7 @@ const mobileColumnStyle = computed(() => {
 onMounted(() => {
   boardStore.subscribeToBoard(boardId);
   boardStore.subscribeToCards(boardId);
+  boardStore.subscribeToActionItems(boardId);
   checkMobile();
   window.addEventListener('resize', checkMobile);
 });
@@ -460,7 +461,7 @@ function hexToRgb(hex) {
         <AiActionables 
           v-if="boardStore.activeBoard.status === 'completed'"
           :board-id="boardId"
-          :action-items="boardStore.activeBoard.actionItems || []"
+          :action-items="boardStore.activeActionItems"
           :mood-summary="boardStore.activeBoard.moodSummary || ''"
           :mood-emoji="boardStore.activeBoard.moodEmoji || ''"
           :is-creator="isCreator"

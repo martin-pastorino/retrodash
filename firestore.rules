@@ -20,10 +20,48 @@ service cloud.firestore {
       );
       
       match /cards/{cardId} {
-        allow read, write: if isAuthenticated() && (
+        // Create: Secure verification against the board (O(N) initial check)
+        // We enforce that the denormalized fields match the board's state.
+        allow create: if isAuthenticated() && (
           get(/databases/$(database)/documents/boards/$(boardId)).data.createdBy == request.auth.uid ||
           get(/databases/$(database)/documents/boards/$(boardId)).data.participants.size() == 0 ||
           request.auth.token.email.lower() in get(/databases/$(database)/documents/boards/$(boardId)).data.participants
+        ) && (
+          request.resource.data.boardCreatorId == get(/databases/$(database)/documents/boards/$(boardId)).data.createdBy &&
+          request.resource.data.boardParticipants == get(/databases/$(database)/documents/boards/$(boardId)).data.participants
+        );
+
+        // Read, Update, Delete: High performance O(1) checks using denormalized data
+        // includes a fallback for legacy cards without denormalized fields
+        allow read, update, delete: if isAuthenticated() && (
+          resource.data.get('boardCreatorId', null) != null ? (
+            resource.data.boardCreatorId == request.auth.uid ||
+            resource.data.boardParticipants.size() == 0 ||
+            request.auth.token.email.lower() in resource.data.boardParticipants
+          ) : (
+            get(/databases/$(database)/documents/boards/$(boardId)).data.createdBy == request.auth.uid ||
+            get(/databases/$(database)/documents/boards/$(boardId)).data.participants.size() == 0 ||
+            request.auth.token.email.lower() in get(/databases/$(database)/documents/boards/$(boardId)).data.participants
+          )
+        );
+      }
+
+      match /actionItems/{itemId} {
+        // Create: Secure verification against the board
+        allow create: if isAuthenticated() && (
+          get(/databases/$(database)/documents/boards/$(boardId)).data.createdBy == request.auth.uid ||
+          get(/databases/$(database)/documents/boards/$(boardId)).data.participants.size() == 0 ||
+          request.auth.token.email.lower() in get(/databases/$(database)/documents/boards/$(boardId)).data.participants
+        ) && (
+          request.resource.data.boardCreatorId == get(/databases/$(database)/documents/boards/$(boardId)).data.createdBy &&
+          request.resource.data.boardParticipants == get(/databases/$(database)/documents/boards/$(boardId)).data.participants
+        );
+
+        // Read, Update, Delete: High performance O(1) checks
+        allow read, update, delete: if isAuthenticated() && (
+          resource.data.boardCreatorId == request.auth.uid ||
+          resource.data.boardParticipants.size() == 0 ||
+          request.auth.token.email.lower() in resource.data.boardParticipants
         );
       }
     }
