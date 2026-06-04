@@ -39,10 +39,35 @@ const isMobile = ref(false);
 const activeMobileColumnIndex = ref(0);
 const touchStartX = ref(0);
 const touchStartY = ref(0);
+const isMobileBottomSheetOpen = ref(false);
+const mobileCardText = ref('');
 
 const checkMobile = () => {
   isMobile.value = window.innerWidth <= 768;
 };
+
+const triggerMobileAdd = () => {
+  mobileCardText.value = '';
+  isMobileBottomSheetOpen.value = true;
+};
+
+const handleMobileSheetSubmit = () => {
+  const text = mobileCardText.value.trim();
+  if (!text) return;
+  const colId = columns.value[activeMobileColumnIndex.value]?.id;
+  if (colId) {
+    handleAddCard(colId, text);
+  }
+  mobileCardText.value = '';
+  isMobileBottomSheetOpen.value = false;
+};
+
+const mobilePlaceholderText = computed(() => {
+  if (!isTimerActive.value) return '🔒 La lluvia de ideas no ha comenzado...';
+  if (!canAddCard.value) return '🔒 El tiempo de escritura ha finalizado.';
+  if (graceTimeRemaining.value !== null && graceTimeRemaining.value > 0) return '⏳ ¡Tiempo de gracia activo!';
+  return 'Escribe tu opinión aquí...';
+});
 
 // Touch gestures handlers
 const handleTouchStart = (e) => {
@@ -497,32 +522,83 @@ function hexToRgb(hex) {
         <!-- Columns lanes grid Orchestration -->
         <div 
           v-if="boardStore.activeBoard.status !== 'completed'"
-          class="board-columns-grid"
-          :style="mobileGridStyle"
-          @touchstart="handleTouchStart"
-          @touchend="handleTouchEnd"
+          class="board-columns-grid-container"
         >
           <div 
-            v-for="col in columns" 
-            :key="col.id"
-            class="column-lane-wrapper"
-            :style="mobileColumnStyle"
+            class="board-columns-grid"
+            :style="mobileGridStyle"
+            @touchstart="handleTouchStart"
+            @touchend="handleTouchEnd"
           >
-            <ColumnLane 
-              :column="col"
-              :cards="cardsByColumn[col.id] || []"
-              :status="boardStore.activeBoard.status"
-              :current-user="currentUser"
-              :is-creator="isCreator"
-              :can-add-card="canAddCard"
-              :grace-time-remaining="graceTimeRemaining"
-              :is-timer-active="isTimerActive"
-              @add-card="(text) => handleAddCard(col.id, text)"
-              @delete-card="handleDeleteCard"
-              @vote-card="handleVoteCard"
-            />
+            <div 
+              v-for="col in columns" 
+              :key="col.id"
+              class="column-lane-wrapper"
+              :style="mobileColumnStyle"
+            >
+              <ColumnLane 
+                :column="col"
+                :cards="cardsByColumn[col.id] || []"
+                :status="boardStore.activeBoard.status"
+                :current-user="currentUser"
+                :is-creator="isCreator"
+                :can-add-card="canAddCard"
+                :grace-time-remaining="graceTimeRemaining"
+                :is-timer-active="isTimerActive"
+                @add-card="(text) => handleAddCard(col.id, text)"
+                @delete-card="handleDeleteCard"
+                @vote-card="handleVoteCard"
+              />
+            </div>
           </div>
         </div>
+
+        <!-- Centralized Mobile interaction UI -->
+        <Teleport to="body">
+          <!-- Floating Add Button -->
+          <button 
+            v-if="isMobile && boardStore.activeBoard.status === 'brainstorm'" 
+            @click="triggerMobileAdd" 
+            class="glass-btn floating-add-btn-mobile"
+            :style="{ background: columns[activeMobileColumnIndex]?.borderColor || 'var(--indigo-600)' }"
+            :disabled="!canAddCard"
+          >
+            <component :is="Plus" class="icon-md" />
+            <span>Agregar Idea</span>
+          </button>
+
+          <!-- Mobile Bottom Sheet Form -->
+          <div 
+            v-if="isMobile && isMobileBottomSheetOpen" 
+            class="bottom-sheet-backdrop" 
+            @click.self="isMobileBottomSheetOpen = false"
+          >
+            <div class="bottom-sheet-content glass-panel animate-slide-up">
+              <div class="bottom-sheet-header">
+                <span class="sheet-indicator"></span>
+                <h4>Nueva Idea en <span :style="{ color: columns[activeMobileColumnIndex]?.borderColor || '#6366f1' }">{{ columns[activeMobileColumnIndex]?.name }}</span></h4>
+                <button @click="isMobileBottomSheetOpen = false" class="close-sheet-btn">&times;</button>
+              </div>
+              <div class="bottom-sheet-body">
+                <textarea 
+                  v-model="mobileCardText" 
+                  :placeholder="mobilePlaceholderText" 
+                  class="glass-input sheet-textarea"
+                  rows="4"
+                  autofocus
+                  :disabled="!canAddCard"
+                ></textarea>
+                <div class="sheet-actions">
+                  <button @click="isMobileBottomSheetOpen = false" class="glass-btn glass-btn-secondary">Cancelar</button>
+                  <button @click="handleMobileSheetSubmit" class="glass-btn glass-btn-primary" :disabled="!canAddCard">
+                    <component :is="Plus" class="icon-sm" />
+                    <span>Agregar al Tablero</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Teleport>
       </div>
 
       <!-- Settings Extracted Modal Component -->
@@ -574,6 +650,13 @@ function hexToRgb(hex) {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+.board-columns-grid-container {
+  flex: 1;
+  width: 100%;
+  overflow-x: hidden;
+  position: relative;
 }
 
 .board-columns-grid {
@@ -698,6 +781,135 @@ function hexToRgb(hex) {
 .mobile-lane-tab.active .tab-count-badge {
   background: var(--indigo-600);
   color: white;
+}
+
+/* --- Mobile Centralized UI Styles --- */
+.floating-add-btn-mobile {
+  position: fixed;
+  bottom: 32px;
+  right: 24px;
+  left: 24px;
+  z-index: 1000;
+  height: 60px;
+  justify-content: center;
+  padding: 0 24px;
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.3);
+  border: none;
+  color: white !important;
+  border-radius: 18px;
+}
+
+.bottom-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-backdrop);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.bottom-sheet-content {
+  background: var(--modal-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-top: 1px solid var(--modal-border);
+  border-radius: 32px 32px 0 0;
+  padding: 24px 24px 48px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  box-shadow: 0 -12px 40px rgba(0,0,0,0.2);
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto; /* Center on tablets */
+}
+
+.bottom-sheet-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  gap: 16px;
+  text-align: center;
+}
+
+.sheet-indicator {
+  width: 40px;
+  height: 5px;
+  background: var(--text-muted);
+  opacity: 0.3;
+  border-radius: 10px;
+}
+
+.bottom-sheet-header h4 {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--text-primary);
+  width: 100%;
+  padding: 0 40px;
+}
+
+.close-sheet-btn {
+  position: absolute;
+  right: -8px;
+  top: 16px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.sheet-textarea {
+  width: 100%;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  font-size: 16px;
+  padding: 18px;
+  border-radius: 18px;
+  resize: none;
+  color: var(--text-primary);
+  box-shadow: var(--glass-shadow-inset);
+  font-family: var(--font-family-body);
+  line-height: 1.5;
+}
+
+.sheet-textarea:focus {
+  border-color: #6366f1;
+  background: var(--glass-bg-hover);
+}
+
+.sheet-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.sheet-actions button {
+  flex: 1;
+  height: 58px;
+  font-weight: 700;
+  border-radius: 18px;
+  font-size: 15px;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }
 
 /* Responsiveness overrides for columns flex grid */

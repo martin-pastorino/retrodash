@@ -9,7 +9,6 @@ service cloud.firestore {
     // Reglas para Tableros y sus Subcolecciones (cards, actionItems, etc.)
     match /boards/{boardId} {
       
-      // Permitir crear si el usuario está autenticado
       allow create: if isAuthenticated();
       
       // Acceso al Tablero: El creador siempre puede, participantes si están en la lista, 
@@ -17,7 +16,7 @@ service cloud.firestore {
       allow read, update, delete: if isAuthenticated() && (
         resource.data.createdBy == request.auth.uid ||
         resource.data.get('participants', []).size() == 0 ||
-        (request.auth.token.get('email', '') != null && request.auth.token.get('email', '').lower() in resource.data.get('participants', []))
+        (request.auth.token.get('email', '').lower() in resource.data.get('participants', []))
       );
       
       // Regla Universal para Subcolecciones: 
@@ -26,12 +25,12 @@ service cloud.firestore {
         allow read, write: if isAuthenticated() && (
           get(/databases/$(database)/documents/boards/$(boardId)).data.createdBy == request.auth.uid ||
           get(/databases/$(database)/documents/boards/$(boardId)).data.get('participants', []).size() == 0 ||
-          (request.auth.token.get('email', '') != null && request.auth.token.get('email', '').lower() in get(/databases/$(database)/documents/boards/$(boardId)).data.get('participants', []))
+          (request.auth.token.get('email', '').lower() in get(/databases/$(database)/documents/boards/$(boardId)).data.get('participants', []))
         );
       }
     }
     
-    // Perfiles de Usuario y Tokens FCM (Acceso privado al dueño)
+    // Perfiles de Usuario y Tokens FCM
     match /users/{userId} {
       allow read, write: if isAuthenticated() && request.auth.uid == userId;
       
