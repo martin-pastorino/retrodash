@@ -27,7 +27,7 @@ class NotificationManager {
     try {
       const supported = await isSupported();
       this.supported = supported;
-      debugger;
+      
       if (supported) {
         this.messaging = getMessaging(app);
         
@@ -204,8 +204,10 @@ class NotificationManager {
           // Extraer la ruta relativa si pertenece a la misma app
           const cleanPath = url.replace(window.location.origin, '');
           if (this.router) {
+            console.log('🚀 [FCM] Navegación fluida (SPA) ejecutada para:', cleanPath);
             this.router.push(cleanPath);
           } else {
+            console.warn('⚠️ [FCM] Router no disponible, forzando recarga de página para:', cleanPath);
             window.location.href = cleanPath;
           }
         }
@@ -264,10 +266,13 @@ class NotificationManager {
 
       notification.onclick = () => {
         window.focus();
+        const targetPath = `/retro/${board.id}`;
         if (this.router) {
+          console.log('🚀 [Notification] Navegación fluida (SPA) ejecutada para:', targetPath);
           this.router.push({ name: 'retro', params: { id: board.id } });
         } else {
-          window.location.href = `/retro/${board.id}`; // fallback
+          console.warn('⚠️ [Notification] Router no disponible, forzando recarga de página para:', targetPath);
+          window.location.href = targetPath;
         }
         notification.close();
       };

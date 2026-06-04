@@ -42,7 +42,6 @@ const emit = defineEmits(['add-card', 'delete-card', 'vote-card']);
 
 const cardText = ref('');
 const isMobile = ref(false);
-const isBottomSheetOpen = ref(false);
 
 const checkMobile = () => {
   isMobile.value = window.innerWidth <= 768;
@@ -69,14 +68,6 @@ const handleAdd = () => {
   if (!text) return;
   emit('add-card', text);
   cardText.value = '';
-};
-
-const handleSheetSubmit = () => {
-  const text = cardText.value.trim();
-  if (!text) return;
-  emit('add-card', text);
-  cardText.value = '';
-  isBottomSheetOpen.value = false;
 };
 </script>
 
@@ -113,18 +104,6 @@ const handleSheetSubmit = () => {
       </button>
     </div>
 
-    <!-- Mobile-First Bottom Sheet Trigger Button -->
-    <button 
-      v-if="status === 'brainstorm' && isMobile" 
-      @click="isBottomSheetOpen = true" 
-      class="glass-btn add-card-trigger-btn"
-      :style="{ background: column.borderColor || 'var(--indigo-600)', color: '#fff' }"
-      :disabled="!canAddCard"
-    >
-      <component :is="Plus" class="icon-sm" />
-      <span>Agregar Idea</span>
-    </button>
-
     <!-- Cards Stack inside Lane -->
     <div class="cards-stack">
       <TransitionGroup name="cards-list">
@@ -140,40 +119,6 @@ const handleSheetSubmit = () => {
         />
       </TransitionGroup>
     </div>
-
-    <!-- Mobile Bottom Sheet Form -->
-    <Teleport to="body">
-      <div 
-        v-if="isMobile && isBottomSheetOpen" 
-        class="bottom-sheet-backdrop" 
-        @click.self="isBottomSheetOpen = false"
-      >
-        <div class="bottom-sheet-content glass-panel animate-slide-up">
-          <div class="bottom-sheet-header">
-            <span class="sheet-indicator"></span>
-            <h4>Nueva Idea en <span :style="{ color: column.borderColor || '#6366f1' }">{{ column.name }}</span></h4>
-            <button @click="isBottomSheetOpen = false" class="close-sheet-btn">&times;</button>
-          </div>
-          <div class="bottom-sheet-body">
-            <textarea 
-              v-model="cardText" 
-              :placeholder="placeholderText" 
-              class="glass-input sheet-textarea"
-              rows="4"
-              autofocus
-              :disabled="!canAddCard"
-            ></textarea>
-            <div class="sheet-actions">
-              <button @click="isBottomSheetOpen = false" class="glass-btn glass-btn-secondary">Cancelar</button>
-              <button @click="handleSheetSubmit" class="glass-btn glass-btn-primary" :disabled="!canAddCard">
-                <component :is="Plus" class="icon-sm" />
-                <span>Agregar al Tablero</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
@@ -258,6 +203,7 @@ const handleSheetSubmit = () => {
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
+  position: relative; /* Essential for TransitionGroup absolute exit */
 }
 
 .mobile-lane .cards-stack {

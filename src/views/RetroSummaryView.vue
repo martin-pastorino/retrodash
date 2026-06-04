@@ -30,6 +30,7 @@ const isCopied = ref(false);
 onMounted(() => {
   boardStore.subscribeToBoard(boardId);
   boardStore.subscribeToCards(boardId);
+  boardStore.subscribeToActionItems(boardId);
 });
 
 onUnmounted(() => {
@@ -55,9 +56,9 @@ const formatDate = (timestamp) => {
 };
 
 // Progress calculations
-const totalActions = computed(() => board.value?.actionItems?.length || 0);
+const totalActions = computed(() => boardStore.activeActionItems.length);
 const completedActions = computed(() => {
-  return board.value?.actionItems?.filter(item => item.status === 'done').length || 0;
+  return boardStore.activeActionItems.filter(item => item.status === 'done').length;
 });
 const progressPercent = computed(() => {
   if (totalActions.value === 0) return 0;
@@ -104,8 +105,8 @@ const generateMarkdownContent = () => {
   const mood = `## 📊 Sentimiento del Sprint: ${board.value.moodEmoji || '✨'}\n> ${board.value.moodSummary || 'No se generó resumen del sentimiento.'}\n\n`;
   
   let actionItemsMd = `## 🎯 Plan de Acción (Accionables sugeridos por IA):\n`;
-  if (board.value.actionItems && board.value.actionItems.length > 0) {
-    board.value.actionItems.forEach((item, index) => {
+  if (boardStore.activeActionItems.length > 0) {
+    boardStore.activeActionItems.forEach((item, index) => {
       const statusSymbol = item.status === 'done' ? '✅' : item.status === 'in_progress' ? '⏳' : '⭕';
       const assigned = item.assignedToName ? `@${item.assignedToName}` : 'Sin asignar';
       actionItemsMd += `${index + 1}. **[${statusSymbol} ${statusLabel(item.status)}]** ${item.text}\n   * *Asignado a:* ${assigned}\n   * *Motivo:* ${item.reason}\n\n`;
@@ -251,9 +252,9 @@ const downloadMarkdownReport = () => {
           <h2>Plan de Acción Comprometido</h2>
         </div>
 
-        <div v-if="board.actionItems && board.actionItems.length > 0" class="action-items-vertical-list">
+        <div v-if="boardStore.activeActionItems.length > 0" class="action-items-vertical-list">
           <div 
-            v-for="item in board.actionItems" 
+            v-for="item in boardStore.activeActionItems" 
             :key="item.id"
             :class="['actionable-detail-card', 'glass-panel', `status-${item.status}`]"
           >

@@ -5,30 +5,32 @@ service cloud.firestore {
     function isAuthenticated() {
       return request.auth != null;
     }
-    
+
+    // Reglas para Tableros y sus Subcolecciones (cards, actionItems, etc.)
     match /boards/{boardId} {
+      
       allow create: if isAuthenticated();
       
-      // Permitir leer, actualizar y borrar si:
-      // 1. El usuario es el creador del tablero (hace posible la consulta by createdBy)
-      // 2. El tablero es abierto (participants está vacío)
-      // 3. El correo del usuario está en la lista de participantes (hace posible la consulta arrayContains)
+      // Acceso al Tablero: El creador siempre puede, participantes si están en la lista, 
+      // o todos si no hay lista de participantes (público).
       allow read, update, delete: if isAuthenticated() && (
         resource.data.createdBy == request.auth.uid ||
-        resource.data.participants.size() == 0 ||
-        request.auth.token.email.lower() in resource.data.participants
+        resource.data.get('participants', []).size() == 0 ||
+        (request.auth.token.get('email', '').lower() in resource.data.get('participants', []))
       );
       
-      match /cards/{cardId} {
+      // Regla Universal para Subcolecciones: 
+      // Hereda la lógica de permisos del Tablero Padre mediante un get()
+      match /{allSubcollections=**} {
         allow read, write: if isAuthenticated() && (
           get(/databases/$(database)/documents/boards/$(boardId)).data.createdBy == request.auth.uid ||
-          get(/databases/$(database)/documents/boards/$(boardId)).data.participants.size() == 0 ||
-          request.auth.token.email.lower() in get(/databases/$(database)/documents/boards/$(boardId)).data.participants
+          get(/databases/$(database)/documents/boards/$(boardId)).data.get('participants', []).size() == 0 ||
+          (request.auth.token.get('email', '').lower() in get(/databases/$(database)/documents/boards/$(boardId)).data.get('participants', []))
         );
       }
     }
-
-    // Reglas de Seguridad para Perfiles y Tokens FCM multidispositivo
+    
+    // Perfiles de Usuario y Tokens FCM
     match /users/{userId} {
       allow read, write: if isAuthenticated() && request.auth.uid == userId;
       
@@ -38,4 +40,3 @@ service cloud.firestore {
     }
   }
 }
-

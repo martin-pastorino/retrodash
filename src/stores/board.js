@@ -23,6 +23,7 @@ export const useBoardStore = defineStore('board', () => {
   const boardsList = ref([]);
   const activeBoard = ref(null);
   const activeCards = ref([]);
+  const activeActionItems = ref([]);
   const loadingBoards = ref(false);
   const deletingBoardId = ref(null);
 
@@ -55,6 +56,7 @@ export const useBoardStore = defineStore('board', () => {
   // Unsubscribe callbacks to prevent memory leaks
   let boardUnsubscribe = null;
   let cardsUnsubscribe = null;
+  let actionsUnsubscribe = null;
 
   // Create a new board
   const createBoard = async (name, durationMinutes, participantsStr, customColumns, user, scheduledAt) => {
@@ -205,6 +207,24 @@ export const useBoardStore = defineStore('board', () => {
     });
   };
 
+  // Sync board action items in real-time
+  const subscribeToActionItems = (boardId) => {
+    if (actionsUnsubscribe) actionsUnsubscribe();
+
+    const actionsRef = collection(db, 'boards', boardId, 'actionItems');
+    const q = query(actionsRef, orderBy('createdAt', 'asc'));
+
+    actionsUnsubscribe = onSnapshot(q, (snapshot) => {
+      const items = [];
+      snapshot.forEach((doc) => {
+        items.push({ id: doc.id, ...doc.data() });
+      });
+      activeActionItems.value = items;
+    }, (error) => {
+      console.error('Error subscribing to action items:', error);
+    });
+  };
+
   // Cleanup real-time listeners
   const unsubscribeAll = () => {
     if (boardUnsubscribe) {
@@ -215,8 +235,13 @@ export const useBoardStore = defineStore('board', () => {
       cardsUnsubscribe();
       cardsUnsubscribe = null;
     }
+    if (actionsUnsubscribe) {
+      actionsUnsubscribe();
+      actionsUnsubscribe = null;
+    }
     activeBoard.value = null;
     activeCards.value = [];
+    activeActionItems.value = [];
   };
 
   // Add a card
@@ -229,7 +254,10 @@ export const useBoardStore = defineStore('board', () => {
         createdByName: user.displayName,
         createdByPhoto: user.photoURL || '',
         createdAt: serverTimestamp(),
-        votes: [] // list of user UIDs
+        votes: [], // list of user UIDs
+        // Denormalized fields for O(1) security rule validation
+        boardCreatorId: activeBoard.value?.createdBy || '',
+        boardParticipants: activeBoard.value?.participants || []
       };
       await addDoc(collection(db, 'boards', boardId, 'cards'), cardData);
     } catch (error) {
@@ -333,11 +361,11 @@ export const useBoardStore = defineStore('board', () => {
     }
   };
 
-  // Save AI Generated Analysis (Mood and Actions) on the Board document
-  const saveAiAnalysis = async (boardId, { moodSummary, moodEmoji, actionItems }) => {
+  // Save AI Generated Analysis (Mood) on the Board document
+  const saveAiAnalysis = async (boardId, { moodSummary, moodEmoji }) => {
     try {
       const boardRef = doc(db, 'boards', boardId);
-      await updateDoc(boardRef, { moodSummary, moodEmoji, actionItems });
+      await updateDoc(boardRef, { moodSummary, moodEmoji });
     } catch (error) {
       console.error('Error saving AI analysis:', error);
       throw error;
@@ -359,8 +387,22 @@ export const useBoardStore = defineStore('board', () => {
   const saveActionPlan = async (boardId, actionItems) => {
     try {
       const boardRef = doc(db, 'boards', boardId);
+      
+      // 1. Create individual documents in the actionItems subcollection
+      const batchPromises = actionItems.map(item => {
+        const itemData = {
+          ...item,
+          // Denormalize for rules performance
+          boardCreatorId: activeBoard.value?.createdBy || '',
+          boardParticipants: activeBoard.value?.participants || []
+        };
+        return addDoc(collection(db, 'boards', boardId, 'actionItems'), itemData);
+      });
+      
+      await Promise.all(batchPromises);
+
+      // 2. Mark plan as saved on the board
       await updateDoc(boardRef, {
-        actionItems,
         actionsPlanSaved: true
       });
     } catch (error) {
@@ -382,46 +424,42 @@ export const useBoardStore = defineStore('board', () => {
     }
   };
 
-  // Update a single action item's status within the board's actionItems array
+  // Update a single action item's status (O(1) update)
   const updateActionItemStatus = async (boardId, actionItemId, newStatus) => {
     try {
-      const boardRef = doc(db, 'boards', boardId);
-      const boardSnap = await getDoc(boardRef);
-      if (!boardSnap.exists()) return;
-
-      const currentItems = boardSnap.data().actionItems || [];
-      const updatedItems = currentItems.map(item => {
-        if (item.id === actionItemId) {
-          return {
-            ...item,
-            status: newStatus,
-            completedAt: newStatus === 'done' ? new Date().toISOString() : null
-          };
-        }
-        return item;
+      const actionRef = doc(db, 'boards', boardId, 'actionItems', actionItemId);
+      await updateDoc(actionRef, { 
+        status: newStatus,
+        completedAt: newStatus === 'done' ? new Date().toISOString() : null
       });
-
-      await updateDoc(boardRef, { actionItems: updatedItems });
     } catch (error) {
       console.error('Error updating action item status:', error);
       throw error;
     }
   };
 
-  // Delete a board and all its cards subcollection
+  // Delete a board and all its subcollections
   const deleteBoard = async (boardId) => {
     try {
       deletingBoardId.value = boardId;
 
-      // 1. Delete all cards in subcollection (Firestore doesn't cascade-delete)
+      // 1. Delete all cards in subcollection
       const cardsRef = collection(db, 'boards', boardId, 'cards');
       const cardsSnap = await getDocs(cardsRef);
-      const deletePromises = cardsSnap.docs.map((cardDoc) =>
+      const deleteCardsPromises = cardsSnap.docs.map((cardDoc) =>
         deleteDoc(doc(db, 'boards', boardId, 'cards', cardDoc.id))
       );
-      await Promise.all(deletePromises);
+      await Promise.all(deleteCardsPromises);
 
-      // 2. Delete the board document itself
+      // 2. Delete all action items in subcollection
+      const actionsRef = collection(db, 'boards', boardId, 'actionItems');
+      const actionsSnap = await getDocs(actionsRef);
+      const deleteActionsPromises = actionsSnap.docs.map((actionDoc) =>
+        deleteDoc(doc(db, 'boards', boardId, 'actionItems', actionDoc.id))
+      );
+      await Promise.all(deleteActionsPromises);
+
+      // 3. Delete the board document itself
       await deleteDoc(doc(db, 'boards', boardId));
     } catch (error) {
       console.error('Error deleting board:', error);
@@ -435,6 +473,7 @@ export const useBoardStore = defineStore('board', () => {
     boardsList,
     activeBoard,
     activeCards,
+    activeActionItems,
     loadingBoards,
     deletingBoardId,
     groupedBoards,
@@ -443,6 +482,7 @@ export const useBoardStore = defineStore('board', () => {
     fetchUserBoards,
     subscribeToBoard,
     subscribeToCards,
+    subscribeToActionItems,
     unsubscribeAll,
     addCard,
     deleteCard,
